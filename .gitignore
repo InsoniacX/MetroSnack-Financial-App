@@ -1,0 +1,23 @@
+# Python / Virtual Environment
+venv/
+ENV/
+env/
+*.pyc
+__pycache__/
+
+# Database Local & Cache Data
+*.db
+*.sqlite3
+*.sqlite
+database/__pycache__/
+
+# IDE & Editor Settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# File Log & OS
+*.log
+.DS_Store
+Thumbs.db
