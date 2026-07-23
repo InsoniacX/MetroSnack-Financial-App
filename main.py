@@ -3,6 +3,7 @@ from database.db import initialize_database
 from components.sidebar import build_sidebar
 from views.dashboard_view import build_dashboard_view
 from views.login_view import build_login_view
+from views.invoice_list_view import build_invoice_list_view
 
 
 def main(page: ft.Page):
@@ -23,6 +24,8 @@ def main(page: ft.Page):
         def navigate(route: str):
             if route == "/":
                 content_area.content = build_dashboard_view()
+            elif route == "/invoices":
+                content_area.content = build_invoice_list_view(page, on_open_folder=lambda y, m: print(f"Buka folder {m}/{y}"))
             else:
                 content_area.content = ft.Container(
                     content=ft.Text(f"Halaman '{route}' belum dibuat.", size=16, color="#94A3B8"),
