@@ -13,14 +13,16 @@ def create_superadmin():
         return
 
     password_hash, password_salt = hash_password(password)
+
     execute(
         """
         INSERT INTO users (username, full_name, password_hash, password_salt, role)
         VALUES (?, ?, ?, ?, 'superadmin')
         """,
-        (username, full_name, password_hash, full_name),
+        (username, full_name, password_hash, password_salt),
     )
     print(f"Superadmin '{username}' created successfully.")
+
 
 if __name__ == "__main__":
     create_superadmin()

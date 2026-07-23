@@ -22,6 +22,13 @@ def initialize_database():
     conn.commit()
     conn.close()
 
+def query_all(sql: str, params=()):
+    conn = get_db_connection()
+    try:
+        return conn.execute(sql, params).fetchall()
+    finally:
+        conn.close()
+
 def query_one(sql: str, params=()):
     conn = get_db_connection()
     try: 
