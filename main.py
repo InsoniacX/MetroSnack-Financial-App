@@ -4,6 +4,7 @@ from components.sidebar import build_sidebar
 from views.dashboard_view import build_dashboard_view
 from views.login_view import build_login_view
 from views.invoice_list_view import build_invoice_list_view
+from views.invoice_detail_view import build_invoice_detail_view
 
 
 def main(page: ft.Page):
@@ -21,11 +22,20 @@ def main(page: ft.Page):
     def show_app(current_user: dict):
         content_area = ft.Container(content=build_dashboard_view(), expand=True)
 
+        def go_to_invoice_list():
+            content_area.content = build_invoice_list_view(page, on_open_folder=go_to_invoice_detail)
+            page.update()
+
+        def go_to_invoice_detail(year: int, month: int):
+            content_area.content = build_invoice_detail_view(page, year, month, on_back=go_to_invoice_list)
+            page.update()
+
         def navigate(route: str):
             if route == "/":
                 content_area.content = build_dashboard_view()
             elif route == "/invoices":
-                content_area.content = build_invoice_list_view(page, on_open_folder=lambda y, m: print(f"Buka folder {m}/{y}"))
+                go_to_invoice_list()
+                return
             else:
                 content_area.content = ft.Container(
                     content=ft.Text(f"Halaman '{route}' belum dibuat.", size=16, color="#94A3B8"),

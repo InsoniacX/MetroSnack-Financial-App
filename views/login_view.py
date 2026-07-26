@@ -32,6 +32,9 @@ def build_login_view(page: ft.Page, on_login_success) -> ft.Container:
         error_text.value = ""
         on_login_success(dict(user))
 
+    username_field.on_submit = handle_login
+    password_field.on_submit = handle_login
+
     return ft.Container(
         alignment=ft.Alignment.CENTER,
         expand=True,

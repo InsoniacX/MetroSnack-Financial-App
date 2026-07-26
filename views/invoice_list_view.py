@@ -15,8 +15,7 @@ def build_invoice_list_view(page: ft.Page, on_open_folder) -> ft.Container:
 
         if not rows:
             folders_column.controls.append(
-                ft.Text("Belum ada folder bulan. Klik 'Buat Folder Bulan Baru' untuk memulai.",
-                         size=13, color="#94A3B8")
+                ft.Text("Belum ada folder bulan. Klik 'Buat Folder Bulan Baru' untuk memulai.", size=13, color="#94A3B8")
             )
         else:
             card_row = []
@@ -29,8 +28,7 @@ def build_invoice_list_view(page: ft.Page, on_open_folder) -> ft.Container:
                     width=340,
                     content=ft.Column(
                         [
-                            ft.Text(format_month_year(r["month"], r["year"]), size=15,
-                                     weight=ft.FontWeight.BOLD, color="black"),
+                            ft.Text(format_month_year(r["month"], r["year"]), size=15, weight=ft.FontWeight.BOLD, color="black"),
                             ft.Text(f"Status: {r['status']}", size=11, color="#94A3B8"),
                             ft.Container(height=10),
                             ft.Row(
