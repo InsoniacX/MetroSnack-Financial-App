@@ -4,7 +4,7 @@ PRIMARY = "#2563EB"
 SLATE_500 = "#64748B"
 
 
-def build_sidebar(on_navigate) -> ft.Container:
+def build_sidebar(on_navigate, current_user: dict) -> ft.Container:
     def nav_button(icon: str, label: str, route: str):
         return ft.TextButton(
             content=ft.Row(
@@ -54,7 +54,7 @@ def build_sidebar(on_navigate) -> ft.Container:
                 nav_button(ft.Icons.DESCRIPTION_OUTLINED, "Invoices", "/invoices"),
                 ft.Container(expand=True),
                 ft.Divider(color="#F1F5F9"),
-                nav_button(ft.Icons.SETTINGS_OUTLINED, "Settings", "/settings"),
+                *([nav_button(ft.Icons.SETTINGS_OUTLINED, "Settings", "/settings")] if current_user['role'] == "superadmin" else []),
                 nav_button(ft.Icons.HELP_OUTLINE, "Help & Support", "/help"),
                 ft.TextButton(
                     content=ft.Row(

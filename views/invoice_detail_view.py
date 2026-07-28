@@ -1,10 +1,12 @@
+from utils.pdf_export import export_invoice_pdf
+import os
 import flet as ft
 from database.db import query_all, query_one, execute
 from utils.format import format_rupiah, format_month_year
 from components.stat_box import stat_box
 
 
-def build_invoice_detail_view(page: ft.Page, year: int, month: int, on_back) -> ft.Container:
+def build_invoice_detail_view(page: ft.Page, year: int, month: int, on_back, current_user: dict) -> ft.Container:
     invoice_table_area = ft.Column(spacing=10)
     stat_row = ft.Row(spacing=16)
     editing_id = {"value": None}
@@ -15,9 +17,8 @@ def build_invoice_detail_view(page: ft.Page, year: int, month: int, on_back) -> 
             (year, month),
         )
 
-    # ---------- Form Input/Edit ----------
-    nota_field = ft.TextField(label="Nomor Nota", width=400, color="black", border_color="#CBD5E1",
-                                label_style=ft.TextStyle(color="#64748B"))
+    # Form Input/Edit
+    nota_field = ft.TextField(label="Nomor Nota", width=400, color="black", border_color="#CBD5E1", label_style=ft.TextStyle(color="#64748B"))
     tanggal_field = ft.TextField(label="Tanggal (YYYY-MM-DD)", width=400, color="black", border_color="#CBD5E1", label_style=ft.TextStyle(color="#64748B"))
     total_field = ft.TextField(label="Total (Rp)", width=400, color="black", border_color="#CBD5E1", label_style=ft.TextStyle(color="#64748B"), value="0")
     hpp_field = ft.TextField(label="HPP (Rp)", width=400, color="black", border_color="#CBD5E1", label_style=ft.TextStyle(color="#64748B"), value="0")
@@ -156,9 +157,9 @@ def build_invoice_detail_view(page: ft.Page, year: int, month: int, on_back) -> 
                 [
                     ft.Text("Nota", size=11, weight=ft.FontWeight.BOLD, color="#94A3B8", width=110),
                     ft.Text("Tanggal", size=11, weight=ft.FontWeight.BOLD, color="#94A3B8", width=100),
-                    ft.Text("Total", size=11, weight=ft.FontWeight.BOLD, color="#94A3B8", width=110),
-                    ft.Text("HPP", size=11, weight=ft.FontWeight.BOLD, color="#94A3B8", width=110),
-                    ft.Text("Laba", size=11, weight=ft.FontWeight.BOLD, color="#94A3B8", width=110),
+                    ft.Text("Masuk Barang", size=11, weight=ft.FontWeight.BOLD, color="#94A3B8", width=110),
+                    ft.Text("Masuk Uang", size=11, weight=ft.FontWeight.BOLD, color="#94A3B8", width=110),
+                    ft.Text("Lebih Uang", size=11, weight=ft.FontWeight.BOLD, color="#94A3B8", width=110),
                     ft.Text("Beban", size=11, weight=ft.FontWeight.BOLD, color="#94A3B8", width=110),
                     ft.Text("Aksi", size=11, weight=ft.FontWeight.BOLD, color="#94A3B8", width=90),
                 ],
@@ -183,7 +184,7 @@ def build_invoice_detail_view(page: ft.Page, year: int, month: int, on_back) -> 
                             ft.Row(
                                 [
                                     ft.IconButton(icon=ft.Icons.EDIT_OUTLINED, icon_size=16, icon_color="#64748B", on_click=lambda e, d=inv_dict: open_edit_dialog(d)),
-                                    ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, icon_size=16, icon_color="#EF4444", on_click=lambda e, d=inv_dict: open_delete_dialog(d)),
+                                    *([ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, icon_size=16, icon_color="#EF4444", on_click=lambda e, d=inv_dict: open_delete_dialog(d))] if current_user["role"] == "superadmin" else []),
                                 ],
                                 spacing=0,
                                 width=90,
@@ -196,6 +197,14 @@ def build_invoice_detail_view(page: ft.Page, year: int, month: int, on_back) -> 
         page.update()
 
     refresh()
+
+    def download_pdf(e):
+        filepath = export_invoice_pdf(year, month)
+        os.startfile(filepath.parent)  # buka folder "exports" di File Explorer (Windows)
+        page.open(
+            ft.SnackBar(content=ft.Text(f"PDF berhasil dibuat: {filepath.name}"))
+        ) if hasattr(page, "open") else None
+        page.update()
 
     return ft.Container(
         padding=24,
@@ -212,7 +221,13 @@ def build_invoice_detail_view(page: ft.Page, year: int, month: int, on_back) -> 
                 ft.Row(
                     [
                         ft.Text(f"Invoice - {format_month_year(month, year)}", size=22, weight=ft.FontWeight.BOLD, color="black"),
-                        ft.ElevatedButton("+ Input Manual", bgcolor="#2563EB", color="white", on_click=open_add_dialog),
+                        ft.Row(
+                            [
+                                ft.OutlinedButton("Download Laporan PDF", on_click=lambda e: download_pdf(e)),
+                                ft.ElevatedButton("+ Input Manual", bgcolor="#2563EB", color="white", on_click=open_add_dialog),
+                            ],
+                            spacing=10,
+                        ),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),

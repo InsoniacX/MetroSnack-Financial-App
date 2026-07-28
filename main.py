@@ -5,6 +5,7 @@ from views.dashboard_view import build_dashboard_view
 from views.login_view import build_login_view
 from views.invoice_list_view import build_invoice_list_view
 from views.invoice_detail_view import build_invoice_detail_view
+from views.settings_view import build_settings_view
 
 
 def main(page: ft.Page):
@@ -27,7 +28,7 @@ def main(page: ft.Page):
             page.update()
 
         def go_to_invoice_detail(year: int, month: int):
-            content_area.content = build_invoice_detail_view(page, year, month, on_back=go_to_invoice_list)
+            content_area.content = build_invoice_detail_view(page, year, month, on_back=go_to_invoice_list, current_user=current_user)
             page.update()
 
         def navigate(route: str):
@@ -36,6 +37,16 @@ def main(page: ft.Page):
             elif route == "/invoices":
                 go_to_invoice_list()
                 return
+            elif route == "/settings":
+                if current_user["role"] == "superadmin":
+                    content_area.content = build_settings_view(page, current_user)
+                else:
+                    content_area.content = ft.Container(
+                        content = ft.Text("Anda tidak memiliki akses ke halaman ini.", size=16, color="#EF4444"),
+                        alignment=ft.Alignment.CENTER,
+                        expand=True
+                    ),
+                
             else:
                 content_area.content = ft.Container(
                     content=ft.Text(f"Halaman '{route}' belum dibuat.", size=16, color="#94A3B8"),
@@ -46,7 +57,7 @@ def main(page: ft.Page):
 
         root_container.content = ft.Row(
             [
-                build_sidebar(on_navigate=navigate),
+                build_sidebar(on_navigate=navigate, current_user=current_user),
                 content_area,
             ],
             expand=True,
