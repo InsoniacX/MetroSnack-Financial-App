@@ -8,13 +8,14 @@ def authenticate_user(username, password):
     )
     if row is None:
         return None
-    uid, uname, phash, role, aktif = row
+    uid, uname, phash, nama_lengkap, role, aktif = row
     if not aktif:
         return None
     if bcrypt.checkpw(password.encode(), phash.encode()):
         return {
             "id" : uid,
             "username": uname,
+            "nama_lengkap": nama_lengkap,
             "role": role,
         }
     return None

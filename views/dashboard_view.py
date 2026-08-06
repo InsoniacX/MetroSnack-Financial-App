@@ -25,7 +25,7 @@ def build_view(page: ft.Page):
     ], spacing=6, expand=True)
 
     return ft.View(
-        "/dashboard",
+        route="/dashboard",
         controls=[
             build_appbar(page, "Dashboard"),
             ft.Row([

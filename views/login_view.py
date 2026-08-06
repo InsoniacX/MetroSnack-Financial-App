@@ -2,6 +2,7 @@ import flet as ft
 from config import APP_TITLE
 from state import app_state
 from db.auth_repo import authenticate_user
+from db.activity_repo import log_activity
 
 
 def build_view(page: ft.Page):
@@ -18,7 +19,7 @@ def build_view(page: ft.Page):
         try:
             user = authenticate_user(username_field.value.strip(), password_field.value)
         except Exception as ex:
-            error_text.value = f"Gagal menghubungkan ke server: {ex}"
+            error_text.value = f"Gagal konek ke server: {ex}"
             page.update()
             return
         if user is None:
@@ -26,10 +27,14 @@ def build_view(page: ft.Page):
             page.update()
             return
         app_state.login(user)
+        try:
+            log_activity(user["id"], user["username"], "LOGIN", "auth", user["id"], "Login berhasil")
+        except Exception:
+            pass  # jangan sampai gagal login gara-gara log gagal dicatat
         page.go("/dashboard")
 
     return ft.View(
-        "/login",
+        route="/login",
         controls=[
             ft.Container(
                 content=ft.Column(

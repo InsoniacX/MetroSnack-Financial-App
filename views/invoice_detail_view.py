@@ -6,12 +6,18 @@ from components.metric_card import metric_card
 from utils.formatting import rp
 from db.invoice_repo import get_invoice_header
 from db.transaksi_repo import get_transaksi, add_transaksi, delete_transaksi
+from db.activity_repo import log_activity
+from state import app_state
 
 
 def build_view(page: ft.Page, invoice_id: int):
+    def refresh():
+        page.views[-1] = build_view(page, invoice_id)
+        page.update()
+
     header = get_invoice_header(invoice_id)
     if header is None:
-        return ft.View(f"/invoice/{invoice_id}", controls=[ft.Text("Invoice tidak ditemukan.")])
+        return ft.View(route=f"/invoice/{invoice_id}", controls=[ft.Text("Invoice tidak ditemukan.")])
     iid, no_laporan, tgl_dibuat, tgl_laporan, invoice_bon, folder_id = header
 
     transaksi = get_transaksi(invoice_id)
@@ -21,31 +27,31 @@ def build_view(page: ft.Page, invoice_id: int):
     omset_penjualan = total_uang
     laba_bersih = total_uang - total_barang
     sisa_hutang_toko = (invoice_bon or 0) + total_barang - total_uang
-    sisa_barang_toko = sisa_hutang_toko  # rumus sama, sesuai konfirmasi Anda
+    sisa_barang_toko = sisa_hutang_toko
 
-    def hapus_baris(tid):
+    def hapus_baris(tid, tanggal_str):
         try:
             delete_transaksi(tid)
-            page.go(f"/invoice/{invoice_id}")
+            log_activity(app_state.user["id"], app_state.user["username"], "DELETE", "transaksi_harian", tid, f"Menghapus transaksi {tanggal_str} di invoice {no_laporan or invoice_id}")
+            refresh()
         except Exception as ex:
-            page.snack_bar = ft.SnackBar(ft.Text(f"Gagal hapus baris: {ex}"), bgcolor=ft.Colors.RED_400)
-            page.snack_bar.open = True
-            page.update()
+            page.show_dialog(ft.SnackBar(ft.Text(f"Gagal hapus baris: {ex}"), bgcolor=ft.Colors.RED_400))
 
     rows = []
     for t in transaksi:
         tid, ttgl, mbarang, muang, lk, ket = t
         warna = ft.Colors.GREEN_700 if ket == "Lebih Uang" else ft.Colors.RED_700
         bg = ft.Colors.GREEN_50 if ket == "Lebih Uang" else ft.Colors.RED_50
+        tgl_str = ttgl.strftime("%d-%m-%Y")
         rows.append(ft.DataRow(cells=[
-            ft.DataCell(ft.Text(ttgl.strftime("%d-%m-%Y"))),
+            ft.DataCell(ft.Text(tgl_str)),
             ft.DataCell(ft.Text(rp(mbarang))),
             ft.DataCell(ft.Text(rp(muang))),
             ft.DataCell(ft.Container(
                 content=ft.Text(f"{rp(lk)}  ({ket})", size=12, color=warna),
-                bgcolor=bg, padding=ft.padding.symmetric(4, 8), border_radius=6,
+                bgcolor=bg, padding=ft.Padding.symmetric(vertical=4, horizontal=8), border_radius=6,
             )),
-            ft.DataCell(ft.IconButton(ft.Icons.DELETE, icon_color=ft.Colors.RED_400, on_click=lambda e, tid=tid: hapus_baris(tid))),
+            ft.DataCell(ft.IconButton(ft.Icons.DELETE, icon_color=ft.Colors.RED_400, on_click=lambda e, tid=tid, ts=tgl_str: hapus_baris(tid, ts))),
         ]))
 
     table = ft.DataTable(
@@ -64,27 +70,23 @@ def build_view(page: ft.Page, invoice_id: int):
     def submit_baris(e):
         try:
             add_transaksi(invoice_id, tgl_field.value, Decimal(barang_field.value or 0), Decimal(uang_field.value or 0))
-            dlg.open = False
-            page.update()
-            page.go(f"/invoice/{invoice_id}")
+            log_activity(app_state.user["id"], app_state.user["username"], "CREATE", "transaksi_harian", invoice_id, f"Tambah transaksi {tgl_field.value} di invoice {no_laporan or invoice_id}")
+            page.pop_dialog()
+            refresh()
         except Exception as ex:
-            page.snack_bar = ft.SnackBar(ft.Text(f"Gagal simpan baris: {ex}"), bgcolor=ft.Colors.RED_400)
-            page.snack_bar.open = True
-            page.update()
+            page.show_dialog(ft.SnackBar(ft.Text(f"Gagal simpan baris: {ex}"), bgcolor=ft.Colors.RED_400))
 
     dlg = ft.AlertDialog(
         title=ft.Text("Tambah baris transaksi harian"),
         content=ft.Row([tgl_field, barang_field, uang_field]),
         actions=[
-            ft.TextButton("Batal", on_click=lambda e: (setattr(dlg, "open", False), page.update())),
+            ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
             ft.ElevatedButton("Simpan", on_click=submit_baris),
         ],
     )
 
     def open_dialog(e):
-        page.dialog = dlg
-        dlg.open = True
-        page.update()
+        page.show_dialog(dlg)
 
     header_info = ft.Row([
         ft.Column([ft.Text("No.", size=11, color=ft.Colors.GREY_600), ft.Text(no_laporan or "-", size=14, weight=ft.FontWeight.W_500)]),
@@ -121,7 +123,7 @@ def build_view(page: ft.Page, invoice_id: int):
     ], scroll=ft.ScrollMode.AUTO, expand=True)
 
     return ft.View(
-        f"/invoice/{invoice_id}",
+        route=f"/invoice/{invoice_id}",
         controls=[
             build_appbar(page, "Detail Invoice"),
             ft.Row([

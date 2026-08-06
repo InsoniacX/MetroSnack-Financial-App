@@ -4,16 +4,20 @@ from config import MONTH
 from components.appbar import build_appbar, nav_rail
 from utils.formatting import rp
 from db.folder_repo import get_folders, create_folder
+from db.activity_repo import log_activity
 from state import app_state
 
 
 def build_view(page: ft.Page):
+    def refresh():
+        page.views[-1] = build_view(page)
+        page.update()
+
     try:
         folders = get_folders()
     except Exception as ex:
         folders = []
-        page.snack_bar = ft.SnackBar(ft.Text(f"Gagal ambil data: {ex}"), bgcolor=ft.Colors.RED_400)
-        page.snack_bar.open = True
+        page.show_dialog(ft.SnackBar(ft.Text(f"Gagal ambil data: {ex}"), bgcolor=ft.Colors.RED_400))
 
     folder_cards = ft.ResponsiveRow(spacing=12, run_spacing=12)
     for f in folders:
@@ -32,42 +36,40 @@ def build_view(page: ft.Page):
                     ft.ElevatedButton("Buka folder", icon=ft.Icons.FOLDER_OPEN, on_click=lambda e, fid=fid, nm=nama_folder: page.go(f"/invoices/{fid}?nama={nm}")),
                 ], spacing=4),
                 bgcolor=ft.Colors.WHITE,
-                border=ft.border.all(0.5, ft.Colors.GREY_300),
+                border=ft.Border.all(0.5, ft.Colors.GREY_300),
                 border_radius=12,
                 padding=16,
             )
         )
 
-    bulan_dd = ft.Dropdown(label="Bulan", width=180,
-                            options=[ft.dropdown.Option(str(i), MONTH[i]) for i in range(1, 13)])
+    bulan_dd = ft.Dropdown(label="Bulan", width=180, options=[ft.dropdown.Option(str(i), MONTH[i]) for i in range(1, 13)])
     tahun_field = ft.TextField(label="Tahun", width=120, value=str(date.today().year))
 
     def submit_folder(e):
         if not bulan_dd.value or not tahun_field.value:
             return
         try:
-            create_folder(int(bulan_dd.value), int(tahun_field.value), app_state.user["id"])
-            dlg.open = False
-            page.update()
-            page.go("/invoices")
+            bulan_int = int(bulan_dd.value)
+            tahun_int = int(tahun_field.value)
+            fid = create_folder(bulan_int, tahun_int, app_state.user["id"])
+            nama_folder = f"{MONTH[bulan_int]} {tahun_int}"
+            log_activity(app_state.user["id"], app_state.user["username"], "CREATE", "folder_bulan", fid, f"Membuat folder {nama_folder}")
+            page.pop_dialog()
+            refresh()
         except Exception as ex:
-            page.snack_bar = ft.SnackBar(ft.Text(f"Gagal buat folder: {ex}"), bgcolor=ft.Colors.RED_400)
-            page.snack_bar.open = True
-            page.update()
+            page.show_dialog(ft.SnackBar(ft.Text(f"Gagal buat folder: {ex}"), bgcolor=ft.Colors.RED_400))
 
     dlg = ft.AlertDialog(
         title=ft.Text("Buat folder bulan baru"),
         content=ft.Row([bulan_dd, tahun_field]),
         actions=[
-            ft.TextButton("Batal", on_click=lambda e: (setattr(dlg, "open", False), page.update())),
+            ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
             ft.ElevatedButton("Simpan", on_click=submit_folder),
         ],
     )
 
     def open_dialog(e):
-        page.dialog = dlg
-        dlg.open = True
-        page.update()
+        page.show_dialog(dlg)
 
     body = ft.Column([
         ft.Row([
@@ -82,7 +84,7 @@ def build_view(page: ft.Page):
     ], scroll=ft.ScrollMode.AUTO, expand=True)
 
     return ft.View(
-        "/invoices",
+        route="/invoices",
         controls=[
             build_appbar(page, "Daftar invoice"),
             ft.Row([
