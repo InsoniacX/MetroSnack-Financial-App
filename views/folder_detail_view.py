@@ -3,16 +3,35 @@ from decimal import Decimal
 from datetime import date
 from components.appbar import build_appbar, nav_rail
 from utils.formatting import rp
+from utils.validation import require_text, parse_date, parse_positive_decimal
 from utils.pdf_export import generate_folder_pdf
 from db.invoice_repo import get_invoices, create_invoice, delete_invoice
+from db.folder_repo import get_folder_header
 from db.activity_repo import log_activity
 from state import app_state
 
 
-def build_view(page: ft.Page, folder_id: int, nama_folder: str):
+def build_view(page: ft.Page, folder_id: int):
     def refresh():
-        page.views[-1] = build_view(page, folder_id, nama_folder)
+        page.views[-1] = build_view(page, folder_id)
         page.update()
+
+    actor = app_state.user
+    is_pusat = actor.get("cabang_id") is None
+
+    header = get_folder_header(folder_id)
+    if header is None:
+        return ft.View(route=f"/invoices/{folder_id}", controls=[ft.Text("Folder tidak ditemukan.")])
+    _, nama_folder, folder_cabang_id, nama_cabang_folder = header
+
+    if not is_pusat and folder_cabang_id != actor.get("cabang_id"):
+        return ft.View(
+            route=f"/invoices/{folder_id}",
+            controls=[
+                build_appbar(page, "Akses Ditolak"),
+                ft.Container(content=ft.Text("Anda tidak punya akses ke folder cabang lain.", size=16), padding=24),
+            ],
+        )
 
     try:
         invoices = get_invoices(folder_id)
@@ -23,7 +42,7 @@ def build_view(page: ft.Page, folder_id: int, nama_folder: str):
     def hapus_invoice(iid, no_laporan):
         try:
             delete_invoice(iid)
-            log_activity(app_state.user["id"], app_state.user["username"], "DELETE", "invoice", iid, f"Menghapus invoice {no_laporan or iid} di {nama_folder}")
+            log_activity(actor["id"], actor["username"], "DELETE", "invoice", iid, f"Menghapus invoice {no_laporan or iid} di {nama_folder}", folder_cabang_id)
             refresh()
         except Exception as ex:
             page.show_dialog(ft.SnackBar(ft.Text(f"Gagal hapus: {ex}"), bgcolor=ft.Colors.RED_400))
@@ -63,13 +82,19 @@ def build_view(page: ft.Page, folder_id: int, nama_folder: str):
 
     def submit_invoice(e):
         try:
+            no_laporan = require_text("No.", no_field.value, max_length=50)
+            tgl_dibuat_val = parse_date("Date", tgl_dibuat_field.value)
+            tgl_laporan_val = parse_date("TGL Laporan", tgl_laporan_field.value)
+            invoice_bon_val = parse_positive_decimal("Invoice / Bon", invoice_bon_field.value)
             iid = create_invoice(
-                folder_id, no_field.value, tgl_dibuat_field.value, tgl_laporan_field.value,
-                Decimal(invoice_bon_field.value or 0), app_state.user["id"],
+                folder_id, no_laporan, tgl_dibuat_val, tgl_laporan_val,
+                invoice_bon_val, actor["id"],
             )
-            log_activity(app_state.user["id"], app_state.user["username"], "CREATE", "invoice", iid, f"Membuat invoice {no_field.value or iid} di {nama_folder}")
+            log_activity(actor["id"], actor["username"], "CREATE", "invoice", iid, f"Membuat invoice {no_laporan} di {nama_folder}", folder_cabang_id)
             page.pop_dialog()
             page.go(f"/invoice/{iid}")
+        except ValueError as ve:
+            page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
         except Exception as ex:
             page.show_dialog(ft.SnackBar(ft.Text(f"Gagal simpan: {ex}"), bgcolor=ft.Colors.RED_400))
 
@@ -104,16 +129,20 @@ def build_view(page: ft.Page, folder_id: int, nama_folder: str):
             save_path += ".pdf"
         try:
             generate_folder_pdf(nama_folder, invoices, save_path)
-            log_activity(app_state.user["id"], app_state.user["username"], "CREATE", "export_pdf", folder_id, f"Export PDF folder {nama_folder}")
+            log_activity(actor["id"], actor["username"], "CREATE", "export_pdf", folder_id, f"Export PDF folder {nama_folder}", folder_cabang_id)
             page.show_dialog(ft.SnackBar(ft.Text(f"PDF berhasil disimpan: {save_path}"), bgcolor=ft.Colors.GREEN_700))
         except Exception as ex:
             page.show_dialog(ft.SnackBar(ft.Text(f"Gagal export PDF: {ex}"), bgcolor=ft.Colors.RED_400))
+
+    title_text = f"Invoice - {nama_folder}"
+    if is_pusat:
+        title_text += f" ({nama_cabang_folder})"
 
     body = ft.Column([
         ft.Row([
             ft.IconButton(ft.Icons.ARROW_BACK, on_click=lambda e: page.go("/invoices")),
             ft.Column([
-                ft.Text(f"Invoice - {nama_folder}", size=20, weight=ft.FontWeight.W_500),
+                ft.Text(title_text, size=20, weight=ft.FontWeight.W_500),
                 ft.Text("Daftar laporan invoice pada periode ini.", size=13, color=ft.Colors.GREY_600),
             ], expand=True),
             ft.OutlinedButton("Export ke PDF", icon=ft.Icons.PICTURE_AS_PDF, on_click=export_pdf),

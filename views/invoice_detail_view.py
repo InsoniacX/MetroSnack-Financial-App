@@ -4,6 +4,7 @@ from datetime import date
 from components.appbar import build_appbar, nav_rail
 from components.metric_card import metric_card
 from utils.formatting import rp
+from utils.validation import parse_date, parse_positive_decimal
 from db.invoice_repo import get_invoice_header
 from db.transaksi_repo import get_transaksi, add_transaksi, delete_transaksi
 from db.activity_repo import log_activity
@@ -15,10 +16,22 @@ def build_view(page: ft.Page, invoice_id: int):
         page.views[-1] = build_view(page, invoice_id)
         page.update()
 
+    actor = app_state.user
+    is_pusat = actor.get("cabang_id") is None
+
     header = get_invoice_header(invoice_id)
     if header is None:
         return ft.View(route=f"/invoice/{invoice_id}", controls=[ft.Text("Invoice tidak ditemukan.")])
-    iid, no_laporan, tgl_dibuat, tgl_laporan, invoice_bon, folder_id = header
+    iid, no_laporan, tgl_dibuat, tgl_laporan, invoice_bon, folder_id, invoice_cabang_id = header
+
+    if not is_pusat and invoice_cabang_id != actor.get("cabang_id"):
+        return ft.View(
+            route=f"/invoice/{invoice_id}",
+            controls=[
+                build_appbar(page, "Akses Ditolak"),
+                ft.Container(content=ft.Text("Anda tidak punya akses ke invoice cabang lain.", size=16), padding=24),
+            ],
+        )
 
     transaksi = get_transaksi(invoice_id)
     total_uang = sum([t[3] for t in transaksi]) if transaksi else Decimal(0)
@@ -32,7 +45,7 @@ def build_view(page: ft.Page, invoice_id: int):
     def hapus_baris(tid, tanggal_str):
         try:
             delete_transaksi(tid)
-            log_activity(app_state.user["id"], app_state.user["username"], "DELETE", "transaksi_harian", tid, f"Menghapus transaksi {tanggal_str} di invoice {no_laporan or invoice_id}")
+            log_activity(actor["id"], actor["username"], "DELETE", "transaksi_harian", tid, f"Menghapus transaksi {tanggal_str} di invoice {no_laporan or invoice_id}", invoice_cabang_id)
             refresh()
         except Exception as ex:
             page.show_dialog(ft.SnackBar(ft.Text(f"Gagal hapus baris: {ex}"), bgcolor=ft.Colors.RED_400))
@@ -69,10 +82,16 @@ def build_view(page: ft.Page, invoice_id: int):
 
     def submit_baris(e):
         try:
-            add_transaksi(invoice_id, tgl_field.value, Decimal(barang_field.value or 0), Decimal(uang_field.value or 0))
-            log_activity(app_state.user["id"], app_state.user["username"], "CREATE", "transaksi_harian", invoice_id, f"Tambah transaksi {tgl_field.value} di invoice {no_laporan or invoice_id}")
+            tanggal_val = parse_date("Tanggal", tgl_field.value)
+            barang_val = parse_positive_decimal("Masuk Barang", barang_field.value)
+            uang_val = parse_positive_decimal("Masuk Uang", uang_field.value)
+            add_transaksi(invoice_id, tanggal_val, barang_val, uang_val)
+            log_activity(actor["id"], actor["username"], "CREATE", "transaksi_harian", invoice_id, f"Tambah transaksi {tanggal_val.strftime('%d-%m-%Y')} di invoice {no_laporan or invoice_id}",
+                         invoice_cabang_id)
             page.pop_dialog()
             refresh()
+        except ValueError as ve:
+            page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
         except Exception as ex:
             page.show_dialog(ft.SnackBar(ft.Text(f"Gagal simpan baris: {ex}"), bgcolor=ft.Colors.RED_400))
 

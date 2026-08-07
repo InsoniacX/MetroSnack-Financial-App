@@ -1,7 +1,10 @@
 import flet as ft
 from state import app_state
 from config import APP_TITLE
-from views import login_view, dashboard_view, invoices_view, folder_detail_view, invoice_detail_view, users_view, activity_log_view
+from views import (
+    login_view, dashboard_view, invoices_view, folder_detail_view,
+    invoice_detail_view, users_view, activity_log_view, cabang_view,
+)
 
 
 def main(page: ft.Page):
@@ -27,12 +30,8 @@ def main(page: ft.Page):
         elif r == "/invoices":
             page.views.append(invoices_view.build_view(page))
         elif r.startswith("/invoices/"):
-            path_part, _, query_part = r.partition("?")
-            folder_id = int(path_part.split("/")[2])
-            nama_folder = "Bulan"
-            if "nama=" in query_part:
-                nama_folder = query_part.split("nama=")[1]
-            page.views.append(folder_detail_view.build_view(page, folder_id, nama_folder))
+            folder_id = int(r.split("/")[2])
+            page.views.append(folder_detail_view.build_view(page, folder_id))
         elif r.startswith("/invoice/"):
             invoice_id = int(r.split("/")[2])
             page.views.append(invoice_detail_view.build_view(page, invoice_id))
@@ -40,6 +39,8 @@ def main(page: ft.Page):
             page.views.append(users_view.build_view(page))
         elif r == "/activity-log":
             page.views.append(activity_log_view.build_view(page))
+        elif r == "/cabang":
+            page.views.append(cabang_view.build_view(page))
         else:
             page.views.append(login_view.build_view(page) if not app_state.is_logged_in() else dashboard_view.build_view(page))
 

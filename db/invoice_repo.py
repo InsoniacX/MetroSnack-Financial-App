@@ -26,7 +26,10 @@ def delete_invoice(invoice_id):
 
 
 def get_invoice_header(invoice_id):
-    return fetch_one(
-        "SELECT id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, folder_bulan_id FROM invoice WHERE id=%s",
-        (invoice_id,),
-    )
+    return fetch_one("""
+        SELECT i.id, i.no_laporan, i.tanggal_dibuat, i.tanggal_laporan, i.invoice_bon,
+            i.folder_bulan_id, f.cabang_id
+        FROM invoice i
+        JOIN folder_bulan f ON f.id = i.folder_bulan_id
+        WHERE i.id=%s
+    """, (invoice_id,))

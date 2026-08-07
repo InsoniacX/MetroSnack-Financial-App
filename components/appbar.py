@@ -5,6 +5,9 @@ from state import app_state
 def build_appbar(page, title):
     user = app_state.user
     nama = user.get("nama", "") if user else ""
+    cabang_label = ""
+    if user:
+        cabang_label = " · Pusat" if user.get("cabang_id") is None else f" · {user.get('nama_cabang', '')}"
 
     def do_logout(e):
         app_state.logout()
@@ -19,7 +22,7 @@ def build_appbar(page, title):
             ft.Container(
                 content=ft.Row([
                     ft.Icon(ft.Icons.PERSON, color=ft.Colors.WHITE, size=18),
-                    ft.Text(nama, color=ft.Colors.WHITE, size=13),
+                    ft.Text(f"{nama}{cabang_label}", color=ft.Colors.WHITE, size=13),
                     ft.IconButton(ft.Icons.LOGOUT, icon_color=ft.Colors.WHITE, tooltip="Logout", on_click=do_logout),
                 ], spacing=6),
                 padding=ft.Padding.only(right=12),
@@ -30,6 +33,7 @@ def build_appbar(page, title):
 
 def nav_rail(page, selected_index):
     is_admin = app_state.user and app_state.user.get("role") == "admin"
+    is_pusat = app_state.user and app_state.user.get("cabang_id") is None
 
     destinations = [
         ft.NavigationRailDestination(icon=ft.Icons.DASHBOARD_OUTLINED, selected_icon=ft.Icons.DASHBOARD, label="Dashboard"),
@@ -46,6 +50,12 @@ def nav_rail(page, selected_index):
             ft.NavigationRailDestination(icon=ft.Icons.HISTORY, selected_icon=ft.Icons.HISTORY, label="Log")
         )
         routes.append("/activity-log")
+
+    if is_pusat:
+        destinations.append(
+            ft.NavigationRailDestination(icon=ft.Icons.STORE_OUTLINED, selected_icon=ft.Icons.STORE, label="Cabang")
+        )
+        routes.append("/cabang")
 
     return ft.NavigationRail(
         selected_index=selected_index,
