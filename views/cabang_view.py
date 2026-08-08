@@ -51,6 +51,7 @@ def build_view(page: ft.Page):
             cid = create_cabang(nama_val, (new_alamat.value or "").strip())
             log_activity(actor["id"], actor["username"], "CREATE", "cabang", cid, f"Membuat cabang {nama_val}", None)
             page.pop_dialog()
+            page.update()
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -85,6 +86,7 @@ def build_view(page: ft.Page):
                 raise ValueError(f"Cabang '{nama_val}' sudah dipakai cabang lain.")
             update_cabang(cid, nama_val, (edit_alamat.value or "").strip())
             log_activity(actor["id"], actor["username"], "UPDATE", "cabang", cid, f"Mengubah data cabang {nama_val}")
+            page.pop_dialog()
             page.update()
             refresh()
         except ValueError as ve:

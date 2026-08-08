@@ -5,7 +5,7 @@ from components.appbar import build_appbar, nav_rail
 from utils.formatting import rp
 from utils.validation import require_text, parse_date, parse_positive_decimal
 from utils.pdf_export import generate_folder_pdf
-from db.invoice_repo import get_invoices, create_invoice, delete_invoice
+from db.invoice_repo import get_invoices, create_invoice, update_invoice, delete_invoice
 from db.folder_repo import get_folder_header
 from db.activity_repo import log_activity
 from state import app_state
@@ -47,6 +47,52 @@ def build_view(page: ft.Page, folder_id: int):
         except Exception as ex:
             page.show_dialog(ft.SnackBar(ft.Text(f"Gagal hapus: {ex}"), bgcolor=ft.Colors.RED_400))
 
+    # ---------- Dialog: edit invoice ----------
+    edit_no_field = ft.TextField(label="No.", width=150)
+    edit_tgl_dibuat_field = ft.TextField(label="Date (YYYY-MM-DD)", width=180)
+    edit_tgl_laporan_field = ft.TextField(label="TGL Laporan (YYYY-MM-DD)", width=200)
+    edit_invoice_bon_field = ft.TextField(label="Invoice / Bon (Rp)", width=200)
+    edit_invoice_target = {"iid": None}
+
+    def submit_edit_invoice(e):
+        iid = edit_invoice_target["iid"]
+        if not iid:
+            return
+        try:
+            no_laporan = require_text("No.", edit_no_field.value, max_length=50)
+            tgl_dibuat_val = parse_date("Date", edit_tgl_dibuat_field.value)
+            tgl_laporan_val = parse_date("TGL Laporan", edit_tgl_laporan_field.value)
+            invoice_bon_val = parse_positive_decimal("Invoice / Bon", edit_invoice_bon_field.value)
+            update_invoice(iid, no_laporan, tgl_dibuat_val, tgl_laporan_val, invoice_bon_val)
+            log_activity(actor["id"], actor["username"], "UPDATE", "invoice", iid, f"Mengubah invoice {no_laporan} di {nama_folder}", folder_cabang_id)
+            page.pop_dialog()
+            page.update()
+            refresh()
+        except ValueError as ve:
+            page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
+        except Exception as ex:
+            page.show_dialog(ft.SnackBar(ft.Text(f"Gagal update: {ex}"), bgcolor=ft.Colors.RED_400))
+
+    edit_invoice_dlg = ft.AlertDialog(
+        title=ft.Text("Edit laporan invoice"),
+        content=ft.Column([
+            ft.Row([edit_no_field, edit_tgl_dibuat_field]),
+            ft.Row([edit_tgl_laporan_field, edit_invoice_bon_field]),
+        ], tight=True, spacing=10),
+        actions=[
+            ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
+            ft.ElevatedButton("Simpan Perubahan", on_click=submit_edit_invoice),
+        ],
+    )
+
+    def open_edit_invoice_dialog(iid, no_laporan, tgl_dibuat, tgl_laporan, invoice_bon):
+        edit_invoice_target["iid"] = iid
+        edit_no_field.value = no_laporan or ""
+        edit_tgl_dibuat_field.value = tgl_dibuat.isoformat() if tgl_dibuat else date.today().isoformat()
+        edit_tgl_laporan_field.value = tgl_laporan.isoformat() if tgl_laporan else date.today().isoformat()
+        edit_invoice_bon_field.value = str(invoice_bon or 0)
+        page.show_dialog(edit_invoice_dlg)
+
     rows = []
     for inv in invoices:
         iid, no_laporan, tgl_dibuat, tgl_laporan, invoice_bon, total_omzet, total_barang = inv
@@ -61,6 +107,7 @@ def build_view(page: ft.Page, folder_id: int):
             ft.DataCell(ft.Text(rp(sisa_hutang))),
             ft.DataCell(ft.Row([
                 ft.IconButton(ft.Icons.VISIBILITY, tooltip="Detail transaksi", on_click=lambda e, iid=iid: page.go(f"/invoice/{iid}")),
+                ft.IconButton(ft.Icons.EDIT, tooltip="Edit", on_click=lambda e, iid=iid, nl=no_laporan, td=tgl_dibuat, tl=tgl_laporan, ib=invoice_bon: open_edit_invoice_dialog(iid, nl, td, tl, ib)),
                 ft.IconButton(ft.Icons.DELETE, icon_color=ft.Colors.RED_400, tooltip="Hapus", on_click=lambda e, iid=iid, nl=no_laporan: hapus_invoice(iid, nl)),
             ])),
         ]))
@@ -92,6 +139,7 @@ def build_view(page: ft.Page, folder_id: int):
             )
             log_activity(actor["id"], actor["username"], "CREATE", "invoice", iid, f"Membuat invoice {no_laporan} di {nama_folder}", folder_cabang_id)
             page.pop_dialog()
+            page.update()
             page.go(f"/invoice/{iid}")
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -137,10 +185,11 @@ def build_view(page: ft.Page, folder_id: int):
     title_text = f"Invoice - {nama_folder}"
     if is_pusat:
         title_text += f" ({nama_cabang_folder})"
+    back_route = f"/invoices/cabang/{folder_cabang_id}" if is_pusat else "/invoices"
 
     body = ft.Column([
         ft.Row([
-            ft.IconButton(ft.Icons.ARROW_BACK, on_click=lambda e: page.go("/invoices")),
+            ft.IconButton(ft.Icons.ARROW_BACK, on_click=lambda e: page.go(back_route)),
             ft.Column([
                 ft.Text(title_text, size=20, weight=ft.FontWeight.W_500),
                 ft.Text("Daftar laporan invoice pada periode ini.", size=13, color=ft.Colors.GREY_600),

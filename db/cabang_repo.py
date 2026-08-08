@@ -17,6 +17,10 @@ def get_all_cabang():
         """
     )
 
+def get_cabang_name(cabang_id):
+    row = fetch_one("SELECT nama_cabang FROM cabang WHERE id=%s", (cabang_id,))
+    return row[0] if row else None
+
 def create_cabang(nama_cabang, alamat):
     return execute(
         "INSERT INTO cabang (nama_cabang, alamat) VALUES (%s, %s) RETURNING id",

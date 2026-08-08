@@ -2,7 +2,7 @@ import flet as ft
 from state import app_state
 from config import APP_TITLE
 from views import (
-    login_view, dashboard_view, invoices_view, folder_detail_view,
+    folder_cabang_view, login_view, dashboard_view, invoices_view, folder_detail_view,
     invoice_detail_view, users_view, activity_log_view, cabang_view,
 )
 
@@ -29,8 +29,12 @@ def main(page: ft.Page):
             page.views.append(dashboard_view.build_view(page))
         elif r == "/invoices":
             page.views.append(invoices_view.build_view(page))
+        elif r.startswith("/invoices/cabang/"):
+            cabang_id = int(r.split("/")[3])
+            page.views.append(invoices_view.build_folder_list(page, cabang_id, r, show_back=True))
         elif r.startswith("/invoices/"):
             folder_id = int(r.split("/")[2])
+            page.views.append(folder_detail_view.build_view(page, folder_id))
             page.views.append(folder_detail_view.build_view(page, folder_id))
         elif r.startswith("/invoice/"):
             invoice_id = int(r.split("/")[2])

@@ -6,7 +6,7 @@ from components.metric_card import metric_card
 from utils.formatting import rp
 from utils.validation import parse_date, parse_positive_decimal
 from db.invoice_repo import get_invoice_header
-from db.transaksi_repo import get_transaksi, add_transaksi, delete_transaksi
+from db.transaksi_repo import get_transaksi, add_transaksi, update_transaksi, delete_transaksi
 from db.activity_repo import log_activity
 from state import app_state
 
@@ -50,6 +50,46 @@ def build_view(page: ft.Page, invoice_id: int):
         except Exception as ex:
             page.show_dialog(ft.SnackBar(ft.Text(f"Gagal hapus baris: {ex}"), bgcolor=ft.Colors.RED_400))
 
+    # ---------- Dialog: edit baris transaksi ----------
+    edit_tgl_field = ft.TextField(label="Tanggal (YYYY-MM-DD)", width=200)
+    edit_barang_field = ft.TextField(label="Masuk Barang (Rp)", width=200)
+    edit_uang_field = ft.TextField(label="Masuk Uang (Rp)", width=200)
+    edit_transaksi_target = {"tid": None}
+
+    def submit_edit_baris(e):
+        tid = edit_transaksi_target["tid"]
+        if not tid:
+            return
+        try:
+            tanggal_val = parse_date("Tanggal", edit_tgl_field.value)
+            barang_val = parse_positive_decimal("Masuk Barang", edit_barang_field.value)
+            uang_val = parse_positive_decimal("Masuk Uang", edit_uang_field.value)
+            update_transaksi(tid, tanggal_val, barang_val, uang_val)
+            log_activity(actor["id"], actor["username"], "UPDATE", "transaksi_harian", tid, f"Mengubah transaksi {tanggal_val.strftime('%d-%m-%Y')} di invoice {no_laporan or invoice_id}", invoice_cabang_id)
+            page.pop_dialog()
+            page.update()
+            refresh()
+        except ValueError as ve:
+            page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
+        except Exception as ex:
+            page.show_dialog(ft.SnackBar(ft.Text(f"Gagal update baris: {ex}"), bgcolor=ft.Colors.RED_400))
+
+    edit_dlg = ft.AlertDialog(
+        title=ft.Text("Edit baris transaksi harian"),
+        content=ft.Row([edit_tgl_field, edit_barang_field, edit_uang_field]),
+        actions=[
+            ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
+            ft.ElevatedButton("Simpan Perubahan", on_click=submit_edit_baris),
+        ],
+    )
+
+    def open_edit_dialog(tid, ttgl, mbarang, muang):
+        edit_transaksi_target["tid"] = tid
+        edit_tgl_field.value = ttgl.isoformat() if ttgl else date.today().isoformat()
+        edit_barang_field.value = str(mbarang or 0)
+        edit_uang_field.value = str(muang or 0)
+        page.show_dialog(edit_dlg)
+
     rows = []
     for t in transaksi:
         tid, ttgl, mbarang, muang, lk, ket = t
@@ -64,14 +104,17 @@ def build_view(page: ft.Page, invoice_id: int):
                 content=ft.Text(f"{rp(lk)}  ({ket})", size=12, color=warna),
                 bgcolor=bg, padding=ft.Padding.symmetric(vertical=4, horizontal=8), border_radius=6,
             )),
-            ft.DataCell(ft.IconButton(ft.Icons.DELETE, icon_color=ft.Colors.RED_400, on_click=lambda e, tid=tid, ts=tgl_str: hapus_baris(tid, ts))),
+            ft.DataCell(ft.Row([
+                ft.IconButton(ft.Icons.EDIT, tooltip="Edit", on_click=lambda e, tid=tid, tt=ttgl, mb=mbarang, mu=muang: open_edit_dialog(tid, tt, mb, mu)),
+                ft.IconButton(ft.Icons.DELETE, icon_color=ft.Colors.RED_400, tooltip="Hapus", on_click=lambda e, tid=tid, ts=tgl_str: hapus_baris(tid, ts)),
+            ])),
         ]))
 
     table = ft.DataTable(
         columns=[
             ft.DataColumn(ft.Text("Tanggal")), ft.DataColumn(ft.Text("Masuk Barang")),
             ft.DataColumn(ft.Text("Masuk Uang")), ft.DataColumn(ft.Text("Lebih / Kurang Uang")),
-            ft.DataColumn(ft.Text("")),
+            ft.DataColumn(ft.Text("Aksi")),
         ],
         rows=rows,
     )
@@ -89,6 +132,7 @@ def build_view(page: ft.Page, invoice_id: int):
             log_activity(actor["id"], actor["username"], "CREATE", "transaksi_harian", invoice_id, f"Tambah transaksi {tanggal_val.strftime('%d-%m-%Y')} di invoice {no_laporan or invoice_id}",
                          invoice_cabang_id)
             page.pop_dialog()
+            page.update()
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))

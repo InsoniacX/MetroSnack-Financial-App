@@ -110,6 +110,7 @@ def build_view(page: ft.Page):
             new_id = create_user(username_val, password_val, nama_val, role_val, target_cabang_id)
             log_activity(actor["id"], actor["username"], "CREATE", "user", new_id, f"Membuat user baru {username_val} (role: {role_val})", target_cabang_id)
             page.pop_dialog()
+            page.update()
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -144,9 +145,9 @@ def build_view(page: ft.Page):
         try:
             nama_val = require_text("Nama Lengkap", edit_nama.value, max_length=100)
             update_user(uid, nama_val, edit_role.value)
-            log_activity(actor["id"], actor["username"], "UPDATE", "user", uid, f"Mengubah data user {edit_target['username']} (nama: {nama_val}, role: {edit_role.value})",
-                         edit_target["cabang_id"])
+            log_activity(actor["id"], actor["username"], "UPDATE", "user", uid, f"Mengubah data user {edit_target['username']} (nama: {nama_val}, role: {edit_role.value})", edit_target["cabang_id"])
             page.pop_dialog()
+            page.update()
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -186,6 +187,7 @@ def build_view(page: ft.Page):
             log_activity(actor["id"], actor["username"], "UPDATE", "user", uid, f"Reset password user {reset_target['username']}", reset_target["cabang_id"])
             reset_password_field.value = ""
             page.pop_dialog()
+            page.update()
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))

@@ -13,17 +13,14 @@ def get_invoices(folder_id):
         ORDER BY i.tanggal_laporan DESC
     """, (folder_id,))
 
-
 def create_invoice(folder_id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, user_id):
     return execute("""
         INSERT INTO invoice (folder_bulan_id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, dibuat_oleh)
         VALUES (%s,%s,%s,%s,%s,%s) RETURNING id
     """, (folder_id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, user_id), returning=True)
 
-
 def delete_invoice(invoice_id):
     execute("DELETE FROM invoice WHERE id=%s", (invoice_id,))
-
 
 def get_invoice_header(invoice_id):
     return fetch_one("""
@@ -33,3 +30,10 @@ def get_invoice_header(invoice_id):
         JOIN folder_bulan f ON f.id = i.folder_bulan_id
         WHERE i.id=%s
     """, (invoice_id,))
+
+def update_invoice(invoice_id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon):
+    execute("""
+        UPDATE invoice
+        SET no_laporan=%s, tanggal_dibuat=%s, tanggal_laporan=%s, invoice_bon=%s
+        WHERE id=%s
+    """, (no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, invoice_id))

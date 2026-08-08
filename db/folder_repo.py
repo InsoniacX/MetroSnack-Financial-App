@@ -21,6 +21,20 @@ def get_dashboard_summary(cabang_id=None):
     laba_bersih = omzet - barang
     return {"omzet": omzet, "barang": barang, "laba_bersih": laba_bersih}
 
+def get_cabang_summary():
+    """Ringkasan per cabang (total folder + laba bersih) untuk halaman 'Pilih Cabang' Admin Pusat."""
+    return fetch_all("""
+        SELECT c.id, c.nama_cabang,
+            COUNT(DISTINCT f.id) AS total_folder,
+            COALESCE(SUM(t.masuk_uang), 0) - COALESCE(SUM(t.masuk_barang), 0) AS laba_bersih
+        FROM cabang c
+        LEFT JOIN folder_bulan f ON f.cabang_id = c.id
+        LEFT JOIN invoice i ON i.folder_bulan_id = f.id
+        LEFT JOIN transaksi_harian t ON t.invoice_id = i.id
+        WHERE c.aktif = TRUE
+        GROUP BY c.id, c.nama_cabang
+        ORDER BY c.nama_cabang
+    """)
 
 def get_monthly_trend(cabang_id=None, limit_months=6):
     if cabang_id is None:
