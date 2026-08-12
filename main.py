@@ -35,7 +35,6 @@ def main(page: ft.Page):
         elif r.startswith("/invoices/"):
             folder_id = int(r.split("/")[2])
             page.views.append(folder_detail_view.build_view(page, folder_id))
-            page.views.append(folder_detail_view.build_view(page, folder_id))
         elif r.startswith("/invoice/"):
             invoice_id = int(r.split("/")[2])
             page.views.append(invoice_detail_view.build_view(page, invoice_id))

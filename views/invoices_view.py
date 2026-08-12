@@ -4,7 +4,7 @@ from config import MONTH
 from components.appbar import build_appbar, nav_rail
 from utils.formatting import rp
 from utils.validation import parse_year
-from db.folder_repo import get_folders, create_folder, get_cabang_summary
+from db.folder_repo import get_folders, create_folder, delete_folder, get_cabang_summary
 from db.cabang_repo import get_cabang_name
 from db.activity_repo import log_activity
 from state import app_state
@@ -80,6 +80,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
     maupun Admin Pusat yang sudah memilih 1 cabang (route /invoices/cabang/{id})."""
     actor = app_state.user
     is_pusat = actor.get("cabang_id") is None
+    is_admin = actor.get("role") == "admin"
 
     if not is_pusat and cabang_id != actor.get("cabang_id"):
         return ft.View(
@@ -107,14 +108,67 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
         folders = []
         page.show_dialog(ft.SnackBar(ft.Text(f"Gagal ambil data: {ex}"), bgcolor=ft.Colors.RED_400))
 
+    # ---------- Dialog: konfirmasi hapus folder (khusus admin/owner) ----------
+    delete_target = {"fid": None, "nama": None, "total_invoice": 0}
+
+    def confirm_delete_folder(e):
+        if not is_admin:
+            page.show_dialog(ft.SnackBar(ft.Text("Hanya admin/owner yang bisa menghapus folder."), bgcolor=ft.Colors.RED_400))
+            return
+        fid = delete_target["fid"]
+        if not fid:
+            return
+        try:
+            delete_folder(fid)
+            log_activity(actor["id"], actor["username"], "DELETE", "folder_bulan", fid, f"Menghapus folder {delete_target['nama']} beserta {delete_target['total_invoice']} invoice di dalamnya", cabang_id)
+            page.pop_dialog()
+            page.update()
+            refresh()
+        except Exception as ex:
+            page.show_dialog(ft.SnackBar(ft.Text(f"Gagal hapus folder: {ex}"), bgcolor=ft.Colors.RED_400))
+
+    delete_folder_dlg = ft.AlertDialog(
+        title=ft.Text("Hapus folder ini?"),
+        content=ft.Text(""),
+        actions=[
+            ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
+            ft.ElevatedButton("Ya, Hapus Permanen", on_click=confirm_delete_folder, bgcolor=ft.Colors.RED_600, color=ft.Colors.WHITE),
+        ],
+    )
+
+    def open_delete_folder_dialog(fid, nama_folder, total_invoice):
+        delete_target["fid"] = fid
+        delete_target["nama"] = nama_folder
+        delete_target["total_invoice"] = total_invoice
+        if total_invoice > 0:
+            pesan = (
+                f"Folder '{nama_folder}' berisi {total_invoice} invoice. "
+                f"Semua invoice beserta transaksi harian di dalamnya akan ikut terhapus permanen. "
+                f"Tindakan ini tidak bisa dibatalkan."
+            )
+        else:
+            pesan = f"Folder '{nama_folder}' masih kosong. Hapus folder ini?"
+        delete_folder_dlg.content = ft.Text(pesan, size=13)
+        page.show_dialog(delete_folder_dlg)
+
     folder_cards = ft.ResponsiveRow(spacing=12, run_spacing=12)
     for f in folders:
         fid, nama_folder, bulan, tahun, _nama_cabang, total_invoice, laba_bersih = f
+
+        header_controls = [
+            ft.Icon(ft.Icons.FOLDER, color=ft.Colors.BLUE_700),
+            ft.Text(nama_folder, weight=ft.FontWeight.W_500, size=16, expand=True),
+        ]
+        if is_admin:
+            header_controls.append(
+                ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color=ft.Colors.RED_400, tooltip="Hapus folder", on_click=lambda e, fid=fid, nm=nama_folder, ti=total_invoice: open_delete_folder_dialog(fid, nm, ti))
+            )
+
         folder_cards.controls.append(
             ft.Container(
                 col={"xs": 12, "sm": 6, "md": 4},
                 content=ft.Column([
-                    ft.Row([ft.Icon(ft.Icons.FOLDER, color=ft.Colors.BLUE_700), ft.Text(nama_folder, weight=ft.FontWeight.W_500, size=16)]),
+                    ft.Row(header_controls),
                     ft.Container(height=8),
                     ft.Row([
                         ft.Column([ft.Text("Total invoice", size=11, color=ft.Colors.GREY_600), ft.Text(str(total_invoice), size=16, weight=ft.FontWeight.W_500)]),

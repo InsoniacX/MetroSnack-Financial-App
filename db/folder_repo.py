@@ -21,6 +21,21 @@ def get_dashboard_summary(cabang_id=None):
     laba_bersih = omzet - barang
     return {"omzet": omzet, "barang": barang, "laba_bersih": laba_bersih}
 
+def get_cabang_breakdown():
+    """Pemasukan (omzet) & pengeluaran (masuk barang) per cabang -> untuk pie chart Dashboard Admin Pusat."""
+    return fetch_all("""
+        SELECT c.id, c.nama_cabang,
+            COALESCE(SUM(t.masuk_uang), 0) AS total_omzet,
+            COALESCE(SUM(t.masuk_barang), 0) AS total_barang
+        FROM cabang c
+        LEFT JOIN folder_bulan f ON f.cabang_id = c.id
+        LEFT JOIN invoice i ON i.folder_bulan_id = f.id
+        LEFT JOIN transaksi_harian t ON t.invoice_id = i.id
+        WHERE c.aktif = TRUE
+        GROUP BY c.id, c.nama_cabang
+        ORDER BY c.nama_cabang
+    """)
+
 def get_cabang_summary():
     """Ringkasan per cabang (total folder + laba bersih) untuk halaman 'Pilih Cabang' Admin Pusat."""
     return fetch_all("""
@@ -108,3 +123,8 @@ def get_folder_header(folder_id):
         JOIN cabang c ON c.id = f.cabang_id
         WHERE f.id = %s
     """, (folder_id,))
+
+def delete_folder(folder_id):
+    """Menghapus folder_bulan. Skema DB sudah ON DELETE CASCADE ke invoice -> transaksi_harian,
+    jadi semua data di dalamnya ikut terhapus otomatis."""
+    execute("DELETE FROM folder_bulan WHERE id=%s", (folder_id,))
