@@ -1,0 +1,15 @@
+# Configuration
+config.py
+
+# Development
+test_login.py
+
+# Build
+build/
+
+# Cache
+__pycache__/
+*/__pycache__
+
+# Product
+installer.iss
