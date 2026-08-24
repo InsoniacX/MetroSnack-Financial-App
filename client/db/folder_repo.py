@@ -1,6 +1,7 @@
 from .http_client import api_get, api_post, api_delete, ApiError
 from ._convert import to_decimal
 
+
 def get_dashboard_summary(cabang_id=None):
     """Kembalikan dict dengan key lama (omzet, barang, laba_bersih) SUPAYA
     KODE VIEW LAMA TETAP JALAN, plus key baru 'sisa_hutang' (dari formula
@@ -61,6 +62,14 @@ def get_folders(cabang_id=None):
 def create_folder(bulan, tahun, cabang_id, user_id):
     resp = api_post("/folders", {"bulan": bulan, "tahun": tahun, "cabang_id": cabang_id})
     return resp["id"]
+
+
+def get_invoice_ids(folder_id):
+    """Query RINGAN -- cuma id invoice, dipakai main.py untuk cek cepat
+    'folder ini punya berapa invoice' sebelum redirect ke halaman
+    transaksi (jauh lebih cepat daripada get_invoices() yang hitung
+    agregat SUM masuk_uang/masuk_barang segala)."""
+    return api_get(f"/folders/{folder_id}/invoice-ids")
 
 
 def get_folder_header(folder_id):

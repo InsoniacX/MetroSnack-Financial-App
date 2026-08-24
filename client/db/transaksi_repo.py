@@ -10,13 +10,13 @@ def get_transaksi(invoice_id):
     rows = api_get(f"/invoices/{invoice_id}/transaksi")
     result = []
     for r in rows:
-        tid, tgl, mbarang, muang, lk, ket = r
-        result.append((tid, to_date(tgl), to_decimal(mbarang), to_decimal(muang), to_decimal(lk), ket))
+        tid, tgl, mbarang, muang, lk, ket, nota = r
+        result.append((tid, to_date(tgl), to_decimal(mbarang), to_decimal(muang), to_decimal(lk), ket, nota))
     return result
 
 
-def add_transaksi(invoice_id, tanggal, masuk_barang, masuk_uang):
-    body = {"tanggal": _iso(tanggal), "masuk_barang": str(masuk_barang), "masuk_uang": str(masuk_uang)}
+def add_transaksi(invoice_id, tanggal, masuk_barang, masuk_uang, nota=None):
+    body = {"tanggal": _iso(tanggal), "masuk_barang": str(masuk_barang), "masuk_uang": str(masuk_uang), "nota": nota}
     api_post(f"/invoices/{invoice_id}/transaksi", body)
 
 
@@ -24,6 +24,6 @@ def delete_transaksi(t_id):
     api_delete(f"/transaksi/{t_id}")
 
 
-def update_transaksi(t_id, tanggal, masuk_barang, masuk_uang):
-    body = {"tanggal": _iso(tanggal), "masuk_barang": str(masuk_barang), "masuk_uang": str(masuk_uang)}
+def update_transaksi(t_id, tanggal, masuk_barang, masuk_uang, nota=None):
+    body = {"tanggal": _iso(tanggal), "masuk_barang": str(masuk_barang), "masuk_uang": str(masuk_uang), "nota": nota}
     api_put(f"/transaksi/{t_id}", body)

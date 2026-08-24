@@ -14,18 +14,18 @@ _style_small = ParagraphStyle("SmallGrey", parent=_styles["Normal"], textColor=c
 
 
 def _transaksi_table(transaksi):
-    """Table detail transaksi harian (Tanggal, Masuk Barang, Masuk Uang, Lebih/Kurang, Keterangan).
-    transaksi: list tuple (id, tanggal, masuk_barang, masuk_uang, lebih_kurang, keterangan)
+    """Table detail transaksi harian (Tanggal, Masuk Barang, Masuk Uang, Lebih/Kurang, Keterangan, Nota).
+    transaksi: list tuple (id, tanggal, masuk_barang, masuk_uang, lebih_kurang, keterangan, nota)
     -> hasil dari db.transaksi_repo.get_transaksi()"""
-    data = [["Tanggal", "Masuk Barang", "Masuk Uang", "Lebih/Kurang", "Ket."]]
+    data = [["Tanggal", "Masuk Barang", "Masuk Uang", "Lebih/Kurang", "Ket.", "Nota"]]
     for t in transaksi:
-        _, tgl, mbarang, muang, lk, ket = t
+        _, tgl, mbarang, muang, lk, ket, nota = t
         data.append([
             tgl.strftime("%d-%m-%Y") if tgl else "-",
-            rp(mbarang), rp(muang), rp(lk), ket or "-",
+            rp(mbarang), rp(muang), rp(lk), ket or "-", nota or "-",
         ])
 
-    table = Table(data, colWidths=[3 * cm, 3.5 * cm, 3.5 * cm, 3.5 * cm, 3 * cm])
+    table = Table(data, colWidths=[2.3 * cm, 2.8 * cm, 2.8 * cm, 2.8 * cm, 2.3 * cm, 3.3 * cm])
     style = [
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#455A64")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -55,12 +55,12 @@ def _ringkasan_paragraph(sisa_hutang, omset, laba_bersih):
 
 def generate_invoice_pdf(invoice_header, transaksi, output_path):
     """
-    invoice_header: tuple (id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, folder_bulan_id, cabang_id)
-    -> hasil dari db.invoice_repo.get_invoice_header()
-    transaksi: list tuple (id, tanggal, masuk_barang, masuk_uang, lebih_kurang, keterangan)
+    invoice_header: tuple (id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, folder_bulan_id, cabang_id, sisa_barang_manual)
+    -> hasil dari db.invoice_repo.get_invoice_header() / get_invoice_full()
+    transaksi: list tuple (id, tanggal, masuk_barang, masuk_uang, lebih_kurang, keterangan, nota)
     -> hasil dari db.transaksi_repo.get_transaksi()
     """
-    iid, no_laporan, tgl_dibuat, tgl_laporan, invoice_bon, _folder_id, _cabang_id = invoice_header
+    iid, no_laporan, tgl_dibuat, tgl_laporan, invoice_bon, _folder_id, _cabang_id, sisa_barang_manual = invoice_header
 
     total_uang = sum(t[3] for t in transaksi) if transaksi else 0
     total_barang = sum(t[2] for t in transaksi) if transaksi else 0

@@ -1,5 +1,6 @@
 from .http_client import api_get, api_post, api_put, api_patch
 
+
 def get_active_cabang():
     rows = api_get("/cabang", params={"active_only": True})
     return [(r[0], r[1]) for r in rows]

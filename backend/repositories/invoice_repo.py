@@ -1,6 +1,12 @@
 from database.connection import fetch_all, fetch_one, execute
 
 
+def get_invoice_ids(folder_id):
+    """Query RINGAN: cuma id invoice, tanpa JOIN/SUM ke transaksi_harian."""
+    rows = fetch_all("SELECT id FROM invoice WHERE folder_bulan_id = %s ORDER BY id", (folder_id,))
+    return [r[0] for r in rows]
+
+
 def get_invoices(folder_id):
     """invoice_bon = Modal Pusat / Nilai Awal (dikonfirmasi 19 Agustus 2026)."""
     return fetch_all("""
@@ -29,7 +35,7 @@ def delete_invoice(invoice_id):
 def get_invoice_header(invoice_id):
     return fetch_one("""
         SELECT i.id, i.no_laporan, i.tanggal_dibuat, i.tanggal_laporan, i.invoice_bon,
-            i.folder_bulan_id, f.cabang_id
+            i.folder_bulan_id, f.cabang_id, i.sisa_barang_manual
         FROM invoice i
         JOIN folder_bulan f ON f.id = i.folder_bulan_id
         WHERE i.id=%s
@@ -54,3 +60,10 @@ def get_invoice_totals(invoice_id):
         WHERE i.id = %s
         GROUP BY i.invoice_bon
     """, (invoice_id,))
+
+
+def update_sisa_barang_manual(invoice_id, value):
+    """Item #3: update nilai Sisa Barang di Toko yang diinput manual staff.
+    Endpoint terpisah dari update_invoice() supaya staff bisa update ini
+    tiap hari tanpa perlu isi ulang field invoice lain."""
+    execute("UPDATE invoice SET sisa_barang_manual=%s WHERE id=%s", (value, invoice_id))

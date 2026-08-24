@@ -79,12 +79,18 @@ class TransaksiCreate(BaseModel):
     tanggal: date
     masuk_barang: Decimal = Decimal("0")
     masuk_uang: Decimal = Decimal("0")
+    nota: Optional[str] = None
 
 
 class TransaksiUpdate(BaseModel):
     tanggal: date
     masuk_barang: Decimal
     masuk_uang: Decimal
+    nota: Optional[str] = None
+
+
+class SisaBarangUpdate(BaseModel):
+    sisa_barang_manual: Decimal
 
 
 class ResetPasswordRequest(BaseModel):

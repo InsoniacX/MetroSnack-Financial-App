@@ -1,3 +1,8 @@
+"""
+_convert.py — helper untuk mengubah data mentah JSON dari API (string,
+float) kembali jadi tipe Python yang dulu dipakai views/*.py (date,
+Decimal, datetime), supaya kode view TIDAK PERLU diubah sama sekali.
+"""
 from datetime import date, datetime
 from decimal import Decimal
 
