@@ -11,5 +11,5 @@ def hutang_style(sisa_hutang):
     Merah kalau masih ada hutang, hijau kalau lunas/lebih bayar."""
     nilai, is_lunas = hutang_amount(sisa_hutang)
     if is_lunas:
-        return nilai, ft.Colors.GREEN_50, ft.Colors.GREEN_900
-    return nilai, ft.Colors.RED_50, ft.Colors.RED_900
+        return nilai, ft.Colors.GREEN_50, ft.Colors.GREEN_900, ft.Colors.GREEN_900, ft.Colors.GREEN_50
+    return nilai, ft.Colors.RED_50, ft.Colors.RED_900, ft.Colors.RED_900, ft.Colors.RED_50

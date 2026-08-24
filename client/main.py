@@ -9,6 +9,7 @@ from views import (
 )
 
 
+
 def _loading_view(route):
     """Halaman transisi singkat, ditampilkan saat menunggu API sebelum
     redirect folder -> invoice (supaya tidak terasa seperti macet/nge-freeze)."""
@@ -34,7 +35,10 @@ def main(page: ft.Page):
     page.window.height = 750
     page.padding = 0
     page.theme_mode = ft.ThemeMode.LIGHT
-    appbar = build_appbar(page, "")
+    
+
+    def refresh_current_view():
+        route_change(page.route)
 
     def get_selected_index(route):
         if route.startswith("/dashboard"):
@@ -50,12 +54,13 @@ def main(page: ft.Page):
         return 0
 
     def create_view(route, title, body):
-        appbar.title = ft.Text(title)
+        appbar = build_appbar(page, title)
 
         navrail = nav_rail(
             page,
             get_selected_index(route),
-            appbar
+            appbar,
+            refresh_current_view,
         )
 
         return ft.View(
@@ -127,10 +132,8 @@ def main(page: ft.Page):
             page.views.append(folder_detail_view.build_view(page, folder_id))
         elif r.startswith("/invoice/"):
             invoice_id = int(r.split("/")[2])
-            appbar.title = ft.Text("Detail Invoice")
-            view = invoice_detail_view.build_view(page, invoice_id)
-            view.appbar = appbar
-            page.views.append(view)
+            body = invoice_detail_view.build_view(page, invoice_id)
+            page.views.append(create_view(r, "Detail Invoice", body))
         elif r == "/users":
             body = users_view.build_view(page)
             page.views.append(create_view("/users", "Kelola User", body))
@@ -156,5 +159,5 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.run(main, assets_dir="assets")
 

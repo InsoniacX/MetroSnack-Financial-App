@@ -9,6 +9,8 @@ def build_appbar(page, title):
     if user:
         cabang_label = " · Pusat" if user.get("cabang_id") is None else f" · {user.get('nama_cabang', '')}"
 
+    is_dark = page.theme_mode == ft.ThemeMode.DARK
+
     def do_logout(e):
         app_state.logout()
         page.go("/login")
@@ -16,7 +18,7 @@ def build_appbar(page, title):
     return ft.AppBar(
         title=ft.Text(title, weight=ft.FontWeight.W_500),
         center_title=False,
-        bgcolor=ft.Colors.BLUE_700,
+        bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.BLUE_700,
         color=ft.Colors.WHITE,
         actions=[
             ft.Container(
@@ -31,7 +33,7 @@ def build_appbar(page, title):
     )
     
 
-def nav_rail(page, selected_index, appbar):
+def nav_rail(page, selected_index, appbar, refresh_current_view):
     is_dark = page.theme_mode == ft.ThemeMode.DARK
     is_admin = app_state.user and app_state.user.get("role") == "admin"
     is_pusat = app_state.user and app_state.user.get("cabang_id") is None
@@ -39,15 +41,13 @@ def nav_rail(page, selected_index, appbar):
     def toggle_theme(e):
         if page.theme_mode == ft.ThemeMode.LIGHT:
             page.theme_mode = ft.ThemeMode.DARK
-            appbar.bgcolor = ft.Colors.GREY_900
             navrail.bgcolor = ft.Colors.BLACK
             theme_button.icon = ft.Icons.LIGHT_MODE_ROUNDED
         else:
             page.theme_mode = ft.ThemeMode.LIGHT
-            appbar.bgcolor = ft.Colors.BLUE_700
             navrail.bgcolor = ft.Colors.GREY_50
             theme_button.icon = ft.Icons.DARK_MODE_ROUNDED
-        page.update()
+        refresh_current_view()
 
     destinations = [
         ft.NavigationRailDestination(icon=ft.Icons.DASHBOARD_OUTLINED, selected_icon=ft.Icons.DASHBOARD, label="Dashboard"),
