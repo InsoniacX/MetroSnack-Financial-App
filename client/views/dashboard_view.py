@@ -199,16 +199,16 @@ def build_view(page: ft.Page):
     ])
 
     body = ft.Column(body_controls, spacing=6, expand=True, scroll=ft.ScrollMode.AUTO)
-
-    return ft.View(
-        route="/dashboard",
-        controls=[
-            build_appbar(page, "Dashboard"),
-            ft.Row([
-                nav_rail(page, 0),
-                ft.VerticalDivider(width=1),
-                ft.Container(content=body, padding=24, expand=True),
-            ], expand=True),
-        ],
-        padding=0,
-    )
+    return body
+    # return ft.View(
+    #     route="/dashboard",
+    #     controls=[
+    #         build_appbar(page, "Dashboard"),
+    #         ft.Row([
+    #             nav_rail(page, 0),
+    #             ft.VerticalDivider(width=1),
+    #             ft.Container(content=body, padding=24, expand=True),
+    #         ], expand=True),
+    #     ],
+    #     padding=0,
+    # )

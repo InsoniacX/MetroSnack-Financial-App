@@ -275,16 +275,16 @@ def build_view(page: ft.Page):
         ft.Container(height=16),
         ft.Row([table], scroll=ft.ScrollMode.AUTO) if users else ft.Text("Belum ada user.", color=ft.Colors.GREY_600),
     ], scroll=ft.ScrollMode.AUTO, expand=True)
-
-    return ft.View(
-        route="/users",
-        controls=[
-            build_appbar(page, "Kelola User"),
-            ft.Row([
-                nav_rail(page, 2),
-                ft.VerticalDivider(width=1),
-                ft.Container(content=body, padding=24, expand=True),
-            ], expand=True)
-        ],
-        padding=0
-    )
+    return body
+    # return ft.View(
+    #     route="/users",
+    #     controls=[
+    #         # build_appbar(page, "Kelola User"),
+    #         ft.Row([
+    #             # nav_rail(page, 2),
+    #             ft.VerticalDivider(width=1),
+    #             ft.Container(content=body, padding=24, expand=True),
+    #         ], expand=True)
+    #     ],
+    #     padding=0
+    # )

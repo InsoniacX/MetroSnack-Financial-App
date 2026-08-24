@@ -1,4 +1,5 @@
 import flet as ft
+from components.appbar import build_appbar, nav_rail
 from state import app_state
 from config import APP_TITLE
 from db.invoice_repo import get_invoices
@@ -7,13 +8,55 @@ from views import (
     invoice_detail_view, users_view, activity_log_view, cabang_view,
 )
 
-
 def main(page: ft.Page):
     page.title = APP_TITLE
     page.window.width = 1100
     page.window.height = 750
     page.padding = 0
     page.theme_mode = ft.ThemeMode.LIGHT
+    appbar = build_appbar(page, "")
+
+    def get_selected_index(route):
+        if route.startswith("/dashboard"):
+            return 0
+        elif route.startswith("/invoices") or route.startswith("/invoice"):
+            return 1
+        elif route == "/users":
+            return 2
+        elif route == "/activity-log":
+            return 3
+        elif route == "/cabang":
+            return 4
+        return 0
+
+    def create_view(route, title, body):
+        appbar.title = ft.Text(title)
+
+        navrail = nav_rail(
+            page,
+            get_selected_index(route),
+            appbar
+        )
+
+        return ft.View(
+            route=route,
+            appbar=appbar,
+            padding=0,
+            controls=[
+                ft.Row(
+                    [
+                        navrail,
+                        ft.VerticalDivider(width=1),
+                        ft.Container(
+                            content=body,
+                            padding=24,
+                            expand=True,
+                        ),
+                    ],
+                    expand=True,
+                )
+            ],
+        )
 
     def route_change(route):
         page.views.clear()
@@ -24,15 +67,25 @@ def main(page: ft.Page):
             page.update()
             return
 
-        if r in ("/login", "/"):
-            page.views.append(login_view.build_view(page) if not app_state.is_logged_in() else dashboard_view.build_view(page))
+        if r == "/login":
+            page.views.append(login_view.build_view(page))
+            page.update()
+            return
+
+        if r == "/":
+            page.go("/dashboard")
+            return
+
         elif r == "/dashboard":
-            page.views.append(dashboard_view.build_view(page))
+            body = dashboard_view.build_view(page)
+            page.views.append(create_view("/dashboard", "Dashboard", body))
         elif r == "/invoices":
-            page.views.append(invoices_view.build_view(page))
+            body = invoices_view.build_view(page)
+            page.views.append(create_view("/invoices", "Daftar Invoice", body))
         elif r.startswith("/invoices/cabang/"):
             cabang_id = int(r.split("/")[3])
-            page.views.append(invoices_view.build_folder_list(page, cabang_id, r, show_back=True))
+            body = invoices_view.build_folder_list(page, cabang_id, r, show_back=True)
+            page.views.append(create_view(r, "Daftar Invoice", body))
         elif r.startswith("/invoices/"):
             folder_id = int(r.split("/")[2])
             # 1 folder = 1 invoice (kebijakan baru): kalau folder ini
@@ -50,20 +103,28 @@ def main(page: ft.Page):
                 invoices = []
             if len(invoices) == 1:
                 page.go(f"/invoice/{invoices[0][0]}")
-                return
-            page.views.append(folder_detail_view.build_view(page, folder_id))
+                appbar.title = ft.Text("Detail Invoice")
+                view = folder_detail_view.build_view(page, folder_id)
+                view.appbar = appbar
+                page.views.append(view)
         elif r.startswith("/invoice/"):
             invoice_id = int(r.split("/")[2])
-            page.views.append(invoice_detail_view.build_view(page, invoice_id))
+            appbar.title = ft.Text("Detail Invoice")
+            view = invoice_detail_view.build_view(page, invoice_id)
+            view.appbar = appbar
+            page.views.append(view)
         elif r == "/users":
-            page.views.append(users_view.build_view(page))
+            body = users_view.build_view(page)
+            page.views.append(create_view("/users", "Kelola User", body))
         elif r == "/activity-log":
-            page.views.append(activity_log_view.build_view(page))
+            body = activity_log_view.build_view(page)
+            page.views.append(create_view("/activity-log", "Log Aktivitas", body))
         elif r == "/cabang":
-            page.views.append(cabang_view.build_view(page))
+            body = cabang_view.build_view(page)
+            page.views.append(create_view("/cabang", "Kelola Cabang", body))
         else:
-            page.views.append(login_view.build_view(page) if not app_state.is_logged_in() else dashboard_view.build_view(page))
-
+            body = login_view.build_view(page) if not app_state.is_logged_in() else dashboard_view.build_view(page)
+            page.views.append(create_view(page.route, "Dashboard", body))
         page.update()
 
     def view_pop(view):

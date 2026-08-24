@@ -237,17 +237,17 @@ def build_view(page: ft.Page, folder_id: int):
     )
 
     body = ft.Column(body_controls, scroll=ft.ScrollMode.AUTO, expand=True)
-
-    return ft.View(
-        route=f"/invoices/{folder_id}",
-        services=[export_picker],
-        controls=[
-            build_appbar(page, "Detail folder"),
-            ft.Row([
-                nav_rail(page, 1),
-                ft.VerticalDivider(width=1),
-                ft.Container(content=body, padding=24, expand=True),
-            ], expand=True),
-        ],
-        padding=0,
-    )
+    return body
+    # return ft.View(
+    #     route=f"/invoices/{folder_id}",
+    #     services=[export_picker],
+    #     controls=[
+    #         # build_appbar(page, "Detail folder"),
+    #         ft.Row([
+    #             # nav_rail(page, 1),
+    #             ft.VerticalDivider(width=1),
+    #             ft.Container(content=body, padding=24, expand=True),
+    #         ], expand=True),
+    #     ],
+    #     padding=0,
+    # )
