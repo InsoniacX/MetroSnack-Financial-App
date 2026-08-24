@@ -9,6 +9,7 @@ from views import (
 )
 
 
+
 def _loading_view(route):
     """Halaman transisi singkat, ditampilkan saat menunggu API sebelum
     redirect folder -> invoice (supaya tidak terasa seperti macet/nge-freeze)."""
@@ -36,6 +37,9 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
     appbar = build_appbar(page, "")
 
+    def refresh_current_view():
+        route_change(page.route)
+
     def get_selected_index(route):
         if route.startswith("/dashboard"):
             return 0
@@ -55,7 +59,8 @@ def main(page: ft.Page):
         navrail = nav_rail(
             page,
             get_selected_index(route),
-            appbar
+            appbar,
+            refresh_current_view,
         )
 
         return ft.View(

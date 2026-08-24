@@ -15,10 +15,11 @@ PIE_COLORS = [
 ]
 
 
-def build_chart(trend_data):
+def build_chart(page, trend_data):
+    is_dark = page.theme_mode == ft.ThemeMode.DARK
     if not trend_data:
         return ft.Container(
-            content=ft.Text("Belum ada data folder bulan untuk ditampilkan di grafik.", color=ft.Colors.GREY_600),
+            content=ft.Text("Belum ada data folder bulan untuk ditampilkan di grafik.", color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600),
             padding=24, alignment=ft.Alignment.CENTER, height=200,
         )
 
@@ -43,7 +44,7 @@ def build_chart(trend_data):
         label_singkat = MONTH[bulan][:3]
         bottom_labels.append(fc.ChartAxisLabel(
             value=idx,
-            label=ft.Text(f"{label_singkat} {str(tahun)[2:]}", size=10, color=ft.Colors.GREY_700),
+            label=ft.Text(f"{label_singkat} {str(tahun)[2:]}", size=10, color=ft.Colors.GREY_300 if is_dark else ft.Colors.GREY_700),
         ))
 
     chart = fc.BarChart(
@@ -63,8 +64,9 @@ def build_chart(trend_data):
     return ft.Column([legend, ft.Container(height=8), chart])
 
 
-def build_cabang_pie(cabang_breakdown, field, judul):
+def build_cabang_pie(page, cabang_breakdown, field, judul):
     """field: 'omzet' (pemasukan) atau 'barang' (pengeluaran)"""
+    is_dark = page.theme_mode == ft.ThemeMode.DARK
     items = []
     total = 0.0
     for row in cabang_breakdown:
@@ -79,7 +81,7 @@ def build_cabang_pie(cabang_breakdown, field, judul):
             content=ft.Column([
                 ft.Text(judul, size=14, weight=ft.FontWeight.W_500),
                 ft.Container(height=8),
-                ft.Text("Belum ada data.", color=ft.Colors.GREY_600, size=12),
+                ft.Text("Belum ada data.", color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600, size=12),
             ]),
             padding=16, height=260,
         )
@@ -115,6 +117,7 @@ def build_cabang_pie(cabang_breakdown, field, judul):
 
 
 def build_view(page: ft.Page):
+    is_dark = page.theme_mode == ft.ThemeMode.DARK
     cabang_id = app_state.user.get("cabang_id")
     is_pusat = cabang_id is None
     scope_label = "Semua Cabang" if is_pusat else app_state.user.get("nama_cabang", "-")
@@ -142,16 +145,16 @@ def build_view(page: ft.Page):
                 ft.Container(
                     col={"xs": 12, "md": 6},
                     content=ft.Container(
-                        content=build_cabang_pie(cabang_breakdown, "omzet", "Pemasukan (Omset)"),
-                        bgcolor=ft.Colors.WHITE, border=ft.Border.all(0.5, ft.Colors.GREY_300),
+                        content=build_cabang_pie(page, cabang_breakdown, "omzet", "Pemasukan (Omset)"),
+                        bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE, border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_300),
                         border_radius=12, padding=16,
                     ),
                 ),
                 ft.Container(
                     col={"xs": 12, "md": 6},
                     content=ft.Container(
-                        content=build_cabang_pie(cabang_breakdown, "barang", "Pengeluaran (Masuk Barang)"),
-                        bgcolor=ft.Colors.WHITE, border=ft.Border.all(0.5, ft.Colors.GREY_300),
+                        content=build_cabang_pie(page, cabang_breakdown, "barang", "Pengeluaran (Masuk Barang)"),
+                        bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE, border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_300),
                         border_radius=12, padding=16,
                     ),
                 ),
@@ -167,10 +170,10 @@ def build_view(page: ft.Page):
     body_controls = [
         ft.Text("Selamat datang kembali", size=20, weight=ft.FontWeight.W_500),
         ft.Row([
-            ft.Text("Menampilkan data:", size=13, color=ft.Colors.GREY_600),
+            ft.Text("Menampilkan data:", size=13, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600),
             ft.Container(
-                content=ft.Text(scope_label, size=12, color=ft.Colors.BLUE_900),
-                bgcolor=ft.Colors.BLUE_50, padding=ft.Padding.symmetric(vertical=2, horizontal=8), border_radius=6,
+                content=ft.Text(scope_label, size=12, color=ft.Colors.BLUE_100 if is_dark else ft.Colors.BLUE_900),
+                bgcolor=ft.Colors.BLUE_900 if is_dark else ft.Colors.BLUE_50, padding=ft.Padding.symmetric(vertical=2, horizontal=8), border_radius=6,
             ),
         ], spacing=6),
         ft.Container(height=16),
@@ -190,8 +193,8 @@ def build_view(page: ft.Page):
         ft.Text("Tren Omset & Laba Bersih (6 Bulan Terakhir)", size=16, weight=ft.FontWeight.W_500),
         ft.Container(height=8),
         ft.Container(
-            content=build_chart(trend_data),
-            bgcolor=ft.Colors.WHITE, border=ft.Border.all(0.5, ft.Colors.GREY_300),
+            content=build_chart(page, trend_data),
+            bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE, border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_300),
             border_radius=12, padding=16,
         ),
         ft.Container(height=24),
