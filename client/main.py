@@ -2,11 +2,31 @@ import flet as ft
 from components.appbar import build_appbar, nav_rail
 from state import app_state
 from config import APP_TITLE
-from db.invoice_repo import get_invoices
+from db.folder_repo import get_invoice_ids
 from views import (
     folder_cabang_view, login_view, dashboard_view, invoices_view, folder_detail_view,
     invoice_detail_view, users_view, activity_log_view, cabang_view,
 )
+
+
+def _loading_view(route):
+    """Halaman transisi singkat, ditampilkan saat menunggu API sebelum
+    redirect folder -> invoice (supaya tidak terasa seperti macet/nge-freeze)."""
+    return ft.View(
+        route=route,
+        controls=[
+            ft.Container(
+                content=ft.Column(
+                    [ft.ProgressRing(width=32, height=32), ft.Container(height=12), ft.Text("Memuat...", size=13, color=ft.Colors.GREY_600)],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                alignment=ft.Alignment.CENTER,
+                expand=True,
+            )
+        ],
+        vertical_alignment=ft.MainAxisAlignment.CENTER,
+    )
+
 
 def main(page: ft.Page):
     page.title = APP_TITLE
@@ -91,22 +111,20 @@ def main(page: ft.Page):
             # 1 folder = 1 invoice (kebijakan baru): kalau folder ini
             # sudah punya PERSIS 1 invoice, langsung lompat ke halaman
             # transaksi harian invoice itu -- lewati halaman daftar
-            # invoice sama sekali. folder_detail_view.py (daftar invoice)
-            # cuma dipakai sebagai fallback untuk 2 kasus khusus:
-            #   - folder belum punya invoice sama sekali (harusnya jarang,
-            #     misal auto-create invoice gagal saat folder dibuat)
-            #   - folder lama yang kebetulan masih punya >1 invoice
-            #     (data sebelum kebijakan ini berlaku)
+            # invoice sama sekali. Tampilkan loading dulu supaya user
+            # tidak lihat layar kosong/macet selagi request jalan.
+            page.views.append(_loading_view(r))
+            page.update()
             try:
-                invoices = get_invoices(folder_id)
+                invoice_ids = get_invoice_ids(folder_id)
             except Exception:
-                invoices = []
-            if len(invoices) == 1:
-                page.go(f"/invoice/{invoices[0][0]}")
-                appbar.title = ft.Text("Detail Invoice")
-                view = folder_detail_view.build_view(page, folder_id)
-                view.appbar = appbar
-                page.views.append(view)
+                invoice_ids = []
+            if len(invoice_ids) == 1:
+                page.views.pop()
+                page.go(f"/invoice/{invoice_ids[0]}")
+                return
+            page.views.pop()
+            page.views.append(folder_detail_view.build_view(page, folder_id))
         elif r.startswith("/invoice/"):
             invoice_id = int(r.split("/")[2])
             appbar.title = ft.Text("Detail Invoice")
@@ -139,3 +157,4 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.run(main)
+

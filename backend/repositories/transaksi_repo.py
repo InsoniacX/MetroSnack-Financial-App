@@ -1,26 +1,25 @@
 from database.connection import fetch_all, fetch_one, execute
 
-
 def get_transaksi(invoice_id):
     return fetch_all("""
-        SELECT id, tanggal_transaksi, masuk_barang, masuk_uang, lebih_kurang, keterangan
+        SELECT id, tanggal_transaksi, masuk_barang, masuk_uang, lebih_kurang, keterangan, nota
         FROM transaksi_harian WHERE invoice_id=%s ORDER BY tanggal_transaksi
     """, (invoice_id,))
 
-def add_transaksi(invoice_id, tanggal, masuk_barang, masuk_uang):
+def add_transaksi(invoice_id, tanggal, masuk_barang, masuk_uang, nota=None):
     execute("""
-        INSERT INTO transaksi_harian (invoice_id, tanggal_transaksi, masuk_barang, masuk_uang)
-        VALUES (%s,%s,%s,%s)
-    """, (invoice_id, tanggal, masuk_barang, masuk_uang))
+        INSERT INTO transaksi_harian (invoice_id, tanggal_transaksi, masuk_barang, masuk_uang, nota)
+        VALUES (%s,%s,%s,%s,%s)
+    """, (invoice_id, tanggal, masuk_barang, masuk_uang, nota))
 
 def delete_transaksi(t_id):
     execute("DELETE FROM transaksi_harian WHERE id=%s", (t_id,))
 
-def update_transaksi(t_id, tanggal, masuk_barang, masuk_uang):
+def update_transaksi(t_id, tanggal, masuk_barang, masuk_uang, nota=None):
     execute("""
-        UPDATE transaksi_harian SET tanggal_transaksi=%s, masuk_barang=%s, masuk_uang=%s
+        UPDATE transaksi_harian SET tanggal_transaksi=%s, masuk_barang=%s, masuk_uang=%s, nota=%s
         WHERE id=%s
-    """, (tanggal, masuk_barang, masuk_uang, t_id))
+    """, (tanggal, masuk_barang, masuk_uang, nota, t_id))
 
 def get_transaksi_cabang_id(t_id):
     """Cari cabang_id pemilik transaksi ini, lewat invoice -> folder_bulan -> cabang.

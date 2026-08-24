@@ -94,7 +94,8 @@ def get_folders(cabang_id=None):
     """
     if cabang_id is None:
         return fetch_all(base_select + " GROUP BY f.id, c.nama_cabang ORDER BY f.tahun DESC, f.bulan DESC")
-    return fetch_all(base_select + " WHERE f.cabang_id = %s GROUP BY f.id, c.nama_cabang ORDER BY f.tahun DESC, f.bulan DESC", (cabang_id,))
+    return fetch_all(base_select + " WHERE f.cabang_id = %s GROUP BY f.id, c.nama_cabang ORDER BY f.tahun DESC, f.bulan DESC",
+                      (cabang_id,))
 
 
 def create_folder(bulan, tahun, cabang_id, user_id):

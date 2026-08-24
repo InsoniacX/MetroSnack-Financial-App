@@ -58,7 +58,10 @@ CREATE TABLE IF NOT EXISTS invoice (
     -- invoice_bon = Modal Pusat / Nilai Awal (lihat catatan di header file).
     invoice_bon NUMERIC(15,2) NOT NULL DEFAULT 0,
     dibuat_oleh INT REFERENCES users(id),
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+    -- Sisa barang fisik di toko, input manual staff (dicek tiap hari,
+    -- nilai TERKINI, bukan riwayat). NULL = belum pernah diisi. (item #3)
+    sisa_barang_manual NUMERIC(15,2)
 );
 
 CREATE TABLE IF NOT EXISTS transaksi_harian (
@@ -72,7 +75,9 @@ CREATE TABLE IF NOT EXISTS transaksi_harian (
     keterangan VARCHAR(20) GENERATED ALWAYS AS (
         CASE WHEN (masuk_uang - masuk_barang) >= 0 THEN 'Lebih Uang' ELSE 'Kurang Uang' END
     ) STORED,
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+    -- Nomor/keterangan nota transaksi, teks bebas, opsional. (item #4)
+    nota VARCHAR(100)
 );
 
 CREATE TABLE IF NOT EXISTS activity_log (

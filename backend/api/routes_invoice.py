@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from auth.dependencies import get_current_user, assert_cabang_access
-from models.schemas import InvoiceCreate, InvoiceUpdate
-from repositories import invoice_repo, folder_repo
+from models.schemas import InvoiceCreate, InvoiceUpdate, SisaBarangUpdate
+from repositories import invoice_repo, folder_repo, transaksi_repo
 from repositories.activity_repo import log_activity
 from services.finance_service import hitung_sisa_hutang
 
@@ -32,6 +32,36 @@ def create_invoice(folder_id: int, body: InvoiceCreate, user: dict = Depends(get
     )
     log_activity(user["id"], user["username"], "CREATE", "invoice", new_id, body.no_laporan, None)
     return {"id": new_id}
+
+
+@router.patch("/invoices/{invoice_id}/sisa-barang")
+def update_sisa_barang(invoice_id: int, body: SisaBarangUpdate, user: dict = Depends(get_current_user)):
+    """Item #3: update nilai Sisa Barang di Toko (input manual staff,
+    dicek fisik tiap hari). Endpoint terpisah dari update_invoice supaya
+    ringan -- staff cuma perlu kirim 1 angka ini tiap hari."""
+    header = invoice_repo.get_invoice_header(invoice_id)
+    if header is None:
+        raise HTTPException(status_code=404, detail="Invoice tidak ditemukan")
+    cabang_id = header[6]
+    assert_cabang_access(user, cabang_id)
+    invoice_repo.update_sisa_barang_manual(invoice_id, body.sisa_barang_manual)
+    log_activity(user["id"], user["username"], "UPDATE", "invoice", invoice_id, f"Update Sisa Barang di Toko: {body.sisa_barang_manual}", cabang_id)
+    return {"ok": True}
+
+
+@router.get("/invoices/{invoice_id}/full")
+def get_invoice_full(invoice_id: int, user: dict = Depends(get_current_user)):
+    """Gabungan header + daftar transaksi dalam 1 request (bukan 2
+    request terpisah), supaya halaman transaksi harian lebih cepat
+    muncul -- terutama penting sekarang karena folder otomatis
+    redirect ke sini (kebijakan 1 folder = 1 invoice)."""
+    header = invoice_repo.get_invoice_header(invoice_id)
+    if header is None:
+        raise HTTPException(status_code=404, detail="Invoice tidak ditemukan")
+    cabang_id = header[6]
+    assert_cabang_access(user, cabang_id)
+    transaksi = transaksi_repo.get_transaksi(invoice_id)
+    return {"header": header, "transaksi": transaksi}
 
 
 @router.get("/invoices/{invoice_id}")

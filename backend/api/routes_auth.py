@@ -21,7 +21,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def login(body: LoginRequest):
     row = fetch_one("""
         SELECT u.id, u.username, u.password_hash, u.nama_lengkap, u.role, u.aktif,
-            u.failed_attempts, u.locked_until, u.cabang_id, c.nama_cabang
+               u.failed_attempts, u.locked_until, u.cabang_id, c.nama_cabang
         FROM users u
         LEFT JOIN cabang c ON c.id = u.cabang_id
         WHERE u.username=%s
@@ -47,14 +47,17 @@ def login(body: LoginRequest):
         if new_failed >= MAX_FAILED_ATTEMPTS:
             unlock_time = datetime.now() + timedelta(minutes=LOCKOUT_MINUTES)
             execute("UPDATE users SET failed_attempts=0, locked_until=%s WHERE id=%s", (unlock_time, uid))
-            log_activity(uid, uname, "LOGIN", "auth", uid, f"Akun dikunci {LOCKOUT_MINUTES} menit karena {MAX_FAILED_ATTEMPTS}x salah password berturut-turut", cabang_id)
+            log_activity(uid, uname, "LOGIN", "auth", uid,
+                         f"Akun dikunci {LOCKOUT_MINUTES} menit karena {MAX_FAILED_ATTEMPTS}x salah password berturut-turut",
+                         cabang_id)
             raise HTTPException(
                 status_code=status.HTTP_423_LOCKED,
                 detail={"message": f"Akun terkunci sampai {unlock_time.strftime('%H:%M')}",
                         "unlock_until": unlock_time.isoformat()},
             )
         execute("UPDATE users SET failed_attempts=%s WHERE id=%s", (new_failed, uid))
-        log_activity(uid, uname, "LOGIN", "auth", uid, f"Login gagal (percobaan ke-{new_failed} dari {MAX_FAILED_ATTEMPTS})", cabang_id)
+        log_activity(uid, uname, "LOGIN", "auth", uid,
+                     f"Login gagal (percobaan ke-{new_failed} dari {MAX_FAILED_ATTEMPTS})", cabang_id)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Username atau password salah")
 
     # Login sukses

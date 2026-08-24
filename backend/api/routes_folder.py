@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from psycopg2 import errors as pg_errors
 from auth.dependencies import get_current_user, assert_cabang_access
 from models.schemas import FolderCreate
-from repositories import folder_repo
+from repositories import folder_repo, invoice_repo
 from repositories.activity_repo import log_activity
 
 router = APIRouter(prefix="/folders", tags=["folders"])
@@ -29,6 +29,20 @@ def create_folder(body: FolderCreate, user: dict = Depends(get_current_user)):
         )
     log_activity(user["id"], user["username"], "CREATE", "folder_bulan", new_id, None, body.cabang_id)
     return {"id": new_id}
+
+
+@router.get("/{folder_id}/invoice-ids")
+def get_folder_invoice_ids(folder_id: int, user: dict = Depends(get_current_user)):
+    """Endpoint RINGAN -- cuma ambil daftar id invoice di folder ini,
+    TANPA query agregat (SUM masuk_uang/masuk_barang dst). Dipakai
+    main.py untuk cek cepat 'folder ini punya berapa invoice' sebelum
+    redirect ke halaman transaksi (kebijakan 1 folder = 1 invoice)."""
+    header = folder_repo.get_folder_header(folder_id)
+    if header is None:
+        raise HTTPException(status_code=404, detail="Folder tidak ditemukan")
+    _, _, cabang_id, _ = header
+    assert_cabang_access(user, cabang_id)
+    return invoice_repo.get_invoice_ids(folder_id)
 
 
 @router.get("/{folder_id}")

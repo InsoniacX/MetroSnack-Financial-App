@@ -36,11 +36,9 @@ def execute(query, params=None, returning=False):
                 result = row[0] if row else None
             conn.commit()
             return result
-        
     except Exception:
         conn.rollback()
         raise
-    
     finally:
         get_pool().putconn(conn)
 
@@ -51,9 +49,6 @@ def fetch_all(query, params=None):
         with conn.cursor() as cur:
             cur.execute(query, params or ())
             return cur.fetchall()
-    except Exception:
-        conn.rollback()
-        raise
     finally:
         get_pool().putconn(conn)
 
@@ -64,8 +59,5 @@ def fetch_one(query, params=None):
         with conn.cursor() as cur:
             cur.execute(query, params or ())
             return cur.fetchone()
-    except Exception:
-        conn.rollback()
-        raise
     finally:
         get_pool().putconn(conn)

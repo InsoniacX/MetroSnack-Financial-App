@@ -16,8 +16,7 @@ def _assert_invoice_access(user, invoice_id):
 
 
 def _assert_transaksi_access(user, transaksi_id):
-    """Cek isolasi cabang untuk transaksi lewat invoice -> folder_bulan -> cabang.
-    Sebelumnya ini belum dicek (ditandai TODO keamanan) -- sekarang sudah."""
+    """Cek isolasi cabang untuk transaksi lewat invoice -> folder_bulan -> cabang."""
     cabang_id = transaksi_repo.get_transaksi_cabang_id(transaksi_id)
     if cabang_id is None:
         raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
@@ -33,7 +32,7 @@ def list_transaksi(invoice_id: int, user: dict = Depends(get_current_user)):
 @router.post("/invoices/{invoice_id}/transaksi")
 def add_transaksi(invoice_id: int, body: TransaksiCreate, user: dict = Depends(get_current_user)):
     _assert_invoice_access(user, invoice_id)
-    transaksi_repo.add_transaksi(invoice_id, body.tanggal, body.masuk_barang, body.masuk_uang)
+    transaksi_repo.add_transaksi(invoice_id, body.tanggal, body.masuk_barang, body.masuk_uang, body.nota)
     log_activity(user["id"], user["username"], "CREATE", "transaksi_harian", invoice_id, None, None)
     return {"ok": True}
 
@@ -41,7 +40,7 @@ def add_transaksi(invoice_id: int, body: TransaksiCreate, user: dict = Depends(g
 @router.put("/transaksi/{transaksi_id}")
 def update_transaksi(transaksi_id: int, body: TransaksiUpdate, user: dict = Depends(get_current_user)):
     _assert_transaksi_access(user, transaksi_id)
-    transaksi_repo.update_transaksi(transaksi_id, body.tanggal, body.masuk_barang, body.masuk_uang)
+    transaksi_repo.update_transaksi(transaksi_id, body.tanggal, body.masuk_barang, body.masuk_uang, body.nota)
     log_activity(user["id"], user["username"], "UPDATE", "transaksi_harian", transaksi_id, None, None)
     return {"ok": True}
 
