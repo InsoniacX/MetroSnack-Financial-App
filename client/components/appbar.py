@@ -29,11 +29,25 @@ def build_appbar(page, title):
             )
         ],
     )
+    
 
-
-def nav_rail(page, selected_index):
+def nav_rail(page, selected_index, appbar):
+    is_dark = page.theme_mode == ft.ThemeMode.DARK
     is_admin = app_state.user and app_state.user.get("role") == "admin"
     is_pusat = app_state.user and app_state.user.get("cabang_id") is None
+
+    def toggle_theme(e):
+        if page.theme_mode == ft.ThemeMode.LIGHT:
+            page.theme_mode = ft.ThemeMode.DARK
+            appbar.bgcolor = ft.Colors.GREY_900
+            navrail.bgcolor = ft.Colors.BLACK
+            theme_button.icon = ft.Icons.LIGHT_MODE_ROUNDED
+        else:
+            page.theme_mode = ft.ThemeMode.LIGHT
+            appbar.bgcolor = ft.Colors.BLUE_700
+            navrail.bgcolor = ft.Colors.GREY_50
+            theme_button.icon = ft.Icons.DARK_MODE_ROUNDED
+        page.update()
 
     destinations = [
         ft.NavigationRailDestination(icon=ft.Icons.DASHBOARD_OUTLINED, selected_icon=ft.Icons.DASHBOARD, label="Dashboard"),
@@ -57,11 +71,19 @@ def nav_rail(page, selected_index):
         )
         routes.append("/cabang")
 
-    return ft.NavigationRail(
-        selected_index=selected_index,
-        label_type=ft.NavigationRailLabelType.ALL,
-        min_width=90,
-        bgcolor=ft.Colors.GREY_50,
-        destinations=destinations,
-        on_change=lambda e: page.go(routes[e.control.selected_index]),
+    theme_button = ft.IconButton(icon=(
+        ft.Icons.LIGHT_MODE_ROUNDED
+        if page.theme_mode == ft.ThemeMode.DARK
+        else ft.Icons.DARK_MODE_ROUNDED
+    ), tooltip="Darkmode", on_click=toggle_theme)
+    
+    navrail = ft.NavigationRail(
+    selected_index=selected_index,
+    label_type=ft.NavigationRailLabelType.ALL,
+    min_width=90,
+    bgcolor=ft.Colors.BLACK if is_dark else ft.Colors.GREY_50,
+    destinations=destinations,
+    trailing=theme_button,
+    on_change=lambda e: page.go(routes[e.control.selected_index]),
     )
+    return navrail

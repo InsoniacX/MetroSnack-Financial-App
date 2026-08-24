@@ -268,17 +268,17 @@ def build_view(page: ft.Page, invoice_id: int):
             ft.Container(col=3, content=metric_card("Laba Bersih", rp(laba_bersih), color=ft.Colors.GREEN_50, text_color=ft.Colors.GREEN_900)),
         ], spacing=12),
     ], scroll=ft.ScrollMode.AUTO, expand=True)
-
-    return ft.View(
-        route=f"/invoice/{invoice_id}",
-        services=[export_picker],
-        controls=[
-            build_appbar(page, "Detail Invoice"),
-            ft.Row([
-                nav_rail(page, 1),
-                ft.VerticalDivider(width=1),
-                ft.Container(content=body, padding=24, expand=True),
-            ], expand=True),
-        ],
-        padding=0,
-    )
+    return body
+    # return ft.View(
+    #     route=f"/invoice/{invoice_id}",
+    #     services=[export_picker],
+    #     controls=[
+    #         # build_appbar(page, "Detail Invoice"),
+    #         ft.Row([
+    #             # nav_rail(page, 1),
+    #             ft.VerticalDivider(width=1),
+    #             ft.Container(content=body, padding=24, expand=True),
+    #         ], expand=True),
+    #     ],
+    #     padding=0,
+    # )

@@ -72,16 +72,16 @@ def build_view(page: ft.Page):
         ft.Container(height=16),
         ft.Row([table], scroll=ft.ScrollMode.AUTO) if activities else ft.Text("Belum ada aktivitas tercatat.", color=ft.Colors.GREY_600),
     ], scroll=ft.ScrollMode.AUTO, expand=True)
-
-    return ft.View(
-        route="/activity-log",
-        controls=[
-            build_appbar(page, "Log Aktivitas"),
-            ft.Row([
-                nav_rail(page, 3),
-                ft.VerticalDivider(width=1),
-                ft.Container(content=body, padding=24, expand=True),
-            ], expand=True),
-        ],
-        padding=0,
-    )
+    return body
+    # return ft.View(
+    #     route="/activity-log",
+    #     controls=[
+    #         # build_appbar(page, "Log Aktivitas"),
+    #         ft.Row([
+    #             # nav_rail(page, 3),
+    #             ft.VerticalDivider(width=1),
+    #             ft.Container(content=body, padding=24, expand=True),
+    #         ], expand=True),
+    #     ],
+    #     padding=0,
+    # )

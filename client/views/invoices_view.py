@@ -13,7 +13,7 @@ from db.activity_repo import log_activity
 from state import app_state
 
 
-def build_view(page: ft.Page):
+def build_view(page: ft.Page)-> ft.Control:
     """Entry point untuk tab 'Invoice'. Admin Pusat -> pilih cabang dulu. Selain itu -> langsung daftar folder miliknya."""
     actor = app_state.user
     cabang_id = actor.get("cabang_id")
@@ -24,7 +24,7 @@ def build_view(page: ft.Page):
     return build_folder_list(page, cabang_id, "/invoices", show_back=False)
 
 
-def build_cabang_hub(page: ft.Page):
+def build_cabang_hub(page: ft.Page)-> ft.Control:
     """Halaman 'Pilih Cabang' - hanya untuk Admin Pusat."""
 
     try:
@@ -63,22 +63,22 @@ def build_cabang_hub(page: ft.Page):
         ft.Container(height=16),
         cabang_cards if cabang_summary else ft.Text("Belum ada cabang aktif. Tambahkan cabang lewat menu Cabang.", color=ft.Colors.GREY_600),
     ], scroll=ft.ScrollMode.AUTO, expand=True)
+    return body
+    # return ft.View(
+    #     route="/invoices",
+    #     controls=[
+    #         build_appbar(page, "Daftar Invoice"),
+    #         ft.Row([
+    #             nav_rail(page, 1),
+    #             ft.VerticalDivider(width=1),
+    #             ft.Container(content=body, padding=24, expand=True),
+    #         ], expand=True),
+    #     ],
+    #     padding=0,
+    # )
 
-    return ft.View(
-        route="/invoices",
-        controls=[
-            build_appbar(page, "Daftar Invoice"),
-            ft.Row([
-                nav_rail(page, 1),
-                ft.VerticalDivider(width=1),
-                ft.Container(content=body, padding=24, expand=True),
-            ], expand=True),
-        ],
-        padding=0,
-    )
 
-
-def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool):
+def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool)-> ft.Control:
     """Daftar folder MILIK 1 CABANG SPESIFIK. Dipakai baik untuk user cabang (route /invoices)
     maupun Admin Pusat yang sudah memilih 1 cabang (route /invoices/cabang/{id})."""
     actor = app_state.user
@@ -324,16 +324,17 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
         folder_cards if folders else ft.Text("Belum ada folder bulan. Buat folder baru untuk mulai.", color=ft.Colors.GREY_600),
     ], scroll=ft.ScrollMode.AUTO, expand=True)
 
-    return ft.View(
-        route=route,
-        services=[export_picker],
-        controls=[
-            build_appbar(page, "Daftar invoice"),
-            ft.Row([
-                nav_rail(page, 1),
-                ft.VerticalDivider(width=1),
-                ft.Container(content=body, padding=24, expand=True),
-            ], expand=True),
-        ],
-        padding=0,
-    )
+    return body
+    # return ft.View(
+    #     route=route,
+    #     services=[export_picker],
+    #     controls=[
+             # build_appbar(page, "Daftar invoice"),
+    #         ft.Row([
+                 # nav_rail(page, 1),
+    #             ft.VerticalDivider(width=1),
+    #             ft.Container(content=body, padding=24, expand=True),
+    #         ], expand=True),
+    #     ],
+    #     padding=0,
+    # )

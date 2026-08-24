@@ -175,10 +175,10 @@ def build_view(page: ft.Page):
         ], spacing=6),
         ft.Container(height=16),
         ft.Row([
-            metric_card("Total omzet", rp(summary["omzet"])),
-            metric_card("Total masuk barang", rp(summary["barang"])),
-            metric_card(hutang_label, rp(hutang_nilai), color=hutang_bg, text_color=hutang_text),
-            metric_card("Laba bersih", rp(summary["laba_bersih"]), color=ft.Colors.GREEN_50, text_color=ft.Colors.GREEN_900),
+            metric_card(page, "Total omzet", rp(summary["omzet"])),
+            metric_card(page, "Total masuk barang", rp(summary["barang"])),
+            metric_card(page, hutang_label, rp(hutang_nilai), light_color=hutang_bg, light_text_color=hutang_text, dark_color=ft.Colors.GREEN_900, dark_text_color=ft.Colors.GREEN_100),
+            metric_card(page, "Laba bersih", rp(summary["laba_bersih"]), light_color=ft.Colors.GREEN_50, light_text_color=ft.Colors.GREEN_900, dark_color=ft.Colors.GREEN_900, dark_text_color=ft.Colors.GREEN_100),
         ], spacing=12),
         ft.Container(height=24),
     ]
@@ -199,16 +199,16 @@ def build_view(page: ft.Page):
     ])
 
     body = ft.Column(body_controls, spacing=6, expand=True, scroll=ft.ScrollMode.AUTO)
-
-    return ft.View(
-        route="/dashboard",
-        controls=[
-            build_appbar(page, "Dashboard"),
-            ft.Row([
-                nav_rail(page, 0),
-                ft.VerticalDivider(width=1),
-                ft.Container(content=body, padding=24, expand=True),
-            ], expand=True),
-        ],
-        padding=0,
-    )
+    return body
+    # return ft.View(
+    #     route="/dashboard",
+    #     controls=[
+    #         build_appbar(page, "Dashboard"),
+    #         ft.Row([
+    #             nav_rail(page, 0),
+    #             ft.VerticalDivider(width=1),
+    #             ft.Container(content=body, padding=24, expand=True),
+    #         ], expand=True),
+    #     ],
+    #     padding=0,
+    # )

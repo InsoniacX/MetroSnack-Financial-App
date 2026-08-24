@@ -159,16 +159,16 @@ def build_view(page: ft.Page):
         ft.Container(height=16),
         ft.Row([table], scroll=ft.ScrollMode.AUTO) if cabang_list else ft.Text("Belum ada cabang.", color=ft.Colors.GREY_600),
     ], scroll=ft.ScrollMode.AUTO, expand=True)
-
-    return ft.View(
-        route="/cabang",
-        controls=[
-            build_appbar(page, "Kelola Cabang"),
-            ft.Row([
-                nav_rail(page, 4),
-                ft.VerticalDivider(width=1),
-                ft.Container(content=body, padding=24, expand=True),
-            ], expand=True),
-        ],
-        padding=0,
-    )
+    return body
+    # return ft.View(
+    #     route="/cabang",
+    #     controls=[
+    #         # build_appbar(page, "Kelola Cabang"),
+    #         ft.Row([
+    #             # nav_rail(page, 4),
+    #             ft.VerticalDivider(width=1),
+    #             ft.Container(content=body, padding=24, expand=True),
+    #         ], expand=True),
+    #     ],
+    #     padding=0,
+    # )
