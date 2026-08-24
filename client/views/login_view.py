@@ -46,7 +46,7 @@ def build_view(page: ft.Page):
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Icon(ft.Icons.STORE, size=48, color=ft.Colors.BLUE_700),
+                        ft.Image(src="METROSNACK_bgremoved.png", width=240, height=240, fit=ft.BoxFit.CONTAIN),
                         ft.Text(APP_TITLE, size=22, weight=ft.FontWeight.W_500),
                         ft.Text("Masuk untuk melanjutkan", size=13, color=ft.Colors.GREY_600),
                         ft.Container(height=16),

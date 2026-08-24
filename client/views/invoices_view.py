@@ -26,7 +26,7 @@ def build_view(page: ft.Page)-> ft.Control:
 
 def build_cabang_hub(page: ft.Page)-> ft.Control:
     """Halaman 'Pilih Cabang' - hanya untuk Admin Pusat."""
-
+    is_dark = page.theme_mode == ft.ThemeMode.DARK
     try:
         cabang_summary = get_cabang_summary()
     except Exception as ex:
@@ -44,14 +44,14 @@ def build_cabang_hub(page: ft.Page)-> ft.Control:
                             ft.Text(nama_cabang, weight=ft.FontWeight.W_500, size=17)], spacing=10),
                     ft.Container(height=12),
                     ft.Row([
-                        ft.Column([ft.Text("Total folder", size=11, color=ft.Colors.GREY_600), ft.Text(str(total_folder), size=16, weight=ft.FontWeight.W_500)]),
-                        ft.Column([ft.Text("Laba bersih", size=11, color=ft.Colors.GREY_600), ft.Text(rp(laba_bersih), size=16, weight=ft.FontWeight.W_500)]),
+                        ft.Column([ft.Text("Total folder", size=11, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600), ft.Text(str(total_folder), size=16, weight=ft.FontWeight.W_500)]),
+                        ft.Column([ft.Text("Laba bersih", size=11, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600), ft.Text(rp(laba_bersih), size=16, weight=ft.FontWeight.W_500)]),
                     ], spacing=24),
                     ft.Container(height=14),
                     ft.ElevatedButton("Lihat invoice cabang ini", icon=ft.Icons.ARROW_FORWARD, on_click=lambda e, cid=cid: page.go(f"/invoices/cabang/{cid}"), bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE),
                 ], spacing=4),
-                bgcolor=ft.Colors.WHITE,
-                border=ft.Border.all(0.5, ft.Colors.GREY_300),
+                bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE,
+                border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_300),
                 border_radius=12,
                 padding=20,
             )
@@ -59,7 +59,7 @@ def build_cabang_hub(page: ft.Page)-> ft.Control:
 
     body = ft.Column([
         ft.Text("Pilih cabang", size=20, weight=ft.FontWeight.W_500),
-        ft.Text("Klik salah satu cabang untuk melihat daftar invoicenya.", size=13, color=ft.Colors.GREY_600),
+        ft.Text("Klik salah satu cabang untuk melihat daftar invoicenya.", size=13, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600),
         ft.Container(height=16),
         cabang_cards if cabang_summary else ft.Text("Belum ada cabang aktif. Tambahkan cabang lewat menu Cabang.", color=ft.Colors.GREY_600),
     ], scroll=ft.ScrollMode.AUTO, expand=True)
@@ -81,6 +81,7 @@ def build_cabang_hub(page: ft.Page)-> ft.Control:
 def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool)-> ft.Control:
     """Daftar folder MILIK 1 CABANG SPESIFIK. Dipakai baik untuk user cabang (route /invoices)
     maupun Admin Pusat yang sudah memilih 1 cabang (route /invoices/cabang/{id})."""
+    is_dark = page.theme_mode == ft.ThemeMode.DARK
     actor = app_state.user
     is_pusat = actor.get("cabang_id") is None
     is_admin = actor.get("role") == "admin"
@@ -173,14 +174,14 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
                     ft.Row(header_controls),
                     ft.Container(height=8),
                     ft.Row([
-                        ft.Column([ft.Text("Total invoice", size=11, color=ft.Colors.GREY_600), ft.Text(str(total_invoice), size=16, weight=ft.FontWeight.W_500)]),
-                        ft.Column([ft.Text("Laba bersih", size=11, color=ft.Colors.GREY_600), ft.Text(rp(laba_bersih), size=16, weight=ft.FontWeight.W_500)]),
+                        ft.Column([ft.Text("Total invoice", size=11, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600), ft.Text(str(total_invoice), size=16, weight=ft.FontWeight.W_500)]),
+                        ft.Column([ft.Text("Laba bersih", size=11, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600), ft.Text(rp(laba_bersih), size=16, weight=ft.FontWeight.W_500)]),
                     ], spacing=24),
                     ft.Container(height=8),
                     ft.ElevatedButton("Buka folder", icon=ft.Icons.FOLDER_OPEN, on_click=lambda e, fid=fid: page.go(f"/invoices/{fid}")),
                 ], spacing=4),
-                bgcolor=ft.Colors.WHITE,
-                border=ft.Border.all(0.5, ft.Colors.GREY_300),
+                bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE,
+                border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_300),
                 border_radius=12,
                 padding=16,
             )
@@ -321,7 +322,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
     body = ft.Column([
         ft.Row(header_row_controls),
         ft.Container(height=16),
-        folder_cards if folders else ft.Text("Belum ada folder bulan. Buat folder baru untuk mulai.", color=ft.Colors.GREY_600),
+        folder_cards if folders else ft.Text("Belum ada folder bulan. Buat folder baru untuk mulai.", color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600),
     ], scroll=ft.ScrollMode.AUTO, expand=True)
 
     return body

@@ -164,7 +164,7 @@ def build_view(page: ft.Page):
 
     # Card Total Hutang -- sekarang pakai data ASLI dari formula Sisa Hutang
     # yang sudah CONFIRMED di backend (dulu placeholder rp(0)).
-    hutang_nilai, hutang_bg, hutang_text = hutang_style(summary.get("sisa_hutang", 0))
+    hutang_nilai, hutang_bg, hutang_text, dark_hutang_bg, dark_hutang_text = hutang_style(summary.get("sisa_hutang", 0))
     hutang_label = "Total Hutang (Semua Toko)" if is_pusat else "Total Hutang Toko Ini"
 
     body_controls = [
@@ -180,7 +180,7 @@ def build_view(page: ft.Page):
         ft.Row([
             metric_card(page, "Total omzet", rp(summary["omzet"])),
             metric_card(page, "Total masuk barang", rp(summary["barang"])),
-            metric_card(page, hutang_label, rp(hutang_nilai), light_color=hutang_bg, light_text_color=hutang_text, dark_color=ft.Colors.GREEN_900, dark_text_color=ft.Colors.GREEN_100),
+            metric_card(page, hutang_label, rp(hutang_nilai), light_color=hutang_bg, light_text_color=hutang_text, dark_color=dark_hutang_bg, dark_text_color=dark_hutang_text),
             metric_card(page, "Laba bersih", rp(summary["laba_bersih"]), light_color=ft.Colors.GREEN_50, light_text_color=ft.Colors.GREEN_900, dark_color=ft.Colors.GREEN_900, dark_text_color=ft.Colors.GREEN_100),
         ], spacing=12),
         ft.Container(height=24),
