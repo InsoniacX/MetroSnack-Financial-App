@@ -20,6 +20,7 @@ def build_view(page: ft.Page, invoice_id: int):
 
     actor = app_state.user
     is_pusat = actor.get("cabang_id") is None
+    is_dark = page.theme_mode == ft.ThemeMode.DARK
 
     header, transaksi = get_invoice_full(invoice_id)
     if header is None:
@@ -99,15 +100,17 @@ def build_view(page: ft.Page, invoice_id: int):
     for t in transaksi:
         tid, ttgl, mbarang, muang, lk, ket, nota = t
         warna = ft.Colors.GREEN_700 if ket == "Lebih Uang" else ft.Colors.RED_700
+        dark_warna = ft.Colors.GREEN_50 if ket == "Lebih Uang" else ft.Colors.RED_50
         bg = ft.Colors.GREEN_50 if ket == "Lebih Uang" else ft.Colors.RED_50
+        dark_bg = ft.Colors.GREEN_700 if ket == "Lebih Uang" else ft.Colors.RED_700
         tgl_str = ttgl.strftime("%d-%m-%Y")
         rows.append(ft.DataRow(cells=[
             ft.DataCell(ft.Text(tgl_str)),
             ft.DataCell(ft.Text(rp(mbarang))),
             ft.DataCell(ft.Text(rp(muang))),
             ft.DataCell(ft.Container(
-                content=ft.Text(f"{rp(lk)}  ({ket})", size=12, color=warna),
-                bgcolor=bg, padding=ft.Padding.symmetric(vertical=4, horizontal=8), border_radius=6,
+                content=ft.Text(f"{rp(lk)}  ({ket})", size=12, color=dark_warna if is_dark else warna),
+                bgcolor=dark_bg if is_dark else bg, padding=ft.Padding.symmetric(vertical=4, horizontal=8), border_radius=6,
             )),
             ft.DataCell(ft.Text(nota or "-", size=12, color=ft.Colors.GREY_700)),
             ft.DataCell(ft.Row([
@@ -197,28 +200,40 @@ def build_view(page: ft.Page, invoice_id: int):
 
     async def export_pdf(e):
         nama_file_default = f"Invoice_{(no_laporan or str(invoice_id)).replace(' ', '_')}.pdf"
-        save_path = await export_picker.save_file(
-            dialog_title="Simpan invoice PDF",
-            file_name=nama_file_default,
-            file_type=ft.FilePickerFileType.CUSTOM,
-            allowed_extensions=["pdf"],
-        )
-        if not save_path:
-            return
-        if not save_path.lower().endswith(".pdf"):
-            save_path += ".pdf"
         try:
-            generate_invoice_pdf(header, transaksi, save_path)
+            if page.platform == ft.PagePlatform.ANDROID or page.platform == ft.PagePlatform.IOS:
+                pdf_bytes = generate_invoice_pdf(header, transaksi, None)
+                save_path = await export_picker.save_file(
+                    dialog_title="Simpan invoice PDF", 
+                    file_name=nama_file_default,
+                    file_type=ft.FilePickerFileType.CUSTOM, 
+                    allowed_extensions=["pdf"], 
+                    src_bytes=pdf_bytes)
+                if not save_path:
+                    return
+            else:
+                save_path = await export_picker.save_file(
+                    dialog_title="Simpan invoice PDF",
+                    file_name=nama_file_default,
+                    file_type=ft.FilePickerFileType.CUSTOM,
+                    allowed_extensions=["pdf"],
+                )
+                if not save_path:
+                    return
+                if not save_path.lower().endswith(".pdf"):
+                    save_path += ".pdf"
+                generate_invoice_pdf(header, transaksi, save_path)
+
             log_activity(actor["id"], actor["username"], "CREATE", "export_pdf", invoice_id, f"Export PDF invoice {no_laporan or invoice_id}", invoice_cabang_id)
             page.show_dialog(ft.SnackBar(ft.Text(f"PDF berhasil disimpan: {save_path}"), bgcolor=ft.Colors.GREEN_700))
         except Exception as ex:
             page.show_dialog(ft.SnackBar(ft.Text(f"Gagal export PDF: {ex}"), bgcolor=ft.Colors.RED_400))
 
     header_info = ft.Row([
-        ft.Column([ft.Text("No.", size=11, color=ft.Colors.GREY_600), ft.Text(no_laporan or "-", size=14, weight=ft.FontWeight.W_500)]),
-        ft.Column([ft.Text("Date", size=11, color=ft.Colors.GREY_600), ft.Text(tgl_dibuat.strftime("%d-%m-%Y") if tgl_dibuat else "-", size=14, weight=ft.FontWeight.W_500)]),
-        ft.Column([ft.Text("TGL Laporan", size=11, color=ft.Colors.GREY_600), ft.Text(tgl_laporan.strftime("%d-%m-%Y") if tgl_laporan else "-", size=14, weight=ft.FontWeight.W_500)]),
-        ft.Column([ft.Text("Invoice / Bon", size=11, color=ft.Colors.GREY_600), ft.Text(rp(invoice_bon), size=14, weight=ft.FontWeight.W_500)]),
+        ft.Column([ft.Text("No.", size=11, color=ft.Colors.WHITE if is_dark else ft.Colors.GREY_600), ft.Text(no_laporan or "-", size=14, weight=ft.FontWeight.W_500)]),
+        ft.Column([ft.Text("Date", size=11, color=ft.Colors.WHITE if is_dark else ft.Colors.GREY_600), ft.Text(tgl_dibuat.strftime("%d-%m-%Y") if tgl_dibuat else "-", size=14, weight=ft.FontWeight.W_500)]),
+        ft.Column([ft.Text("TGL Laporan", size=11, color=ft.Colors.WHITE if is_dark else ft.Colors.GREY_600), ft.Text(tgl_laporan.strftime("%d-%m-%Y") if tgl_laporan else "-", size=14, weight=ft.FontWeight.W_500)]),
+        ft.Column([ft.Text("Invoice / Bon", size=11, color=ft.Colors.WHITE if is_dark else ft.Colors.GREY_600), ft.Text(rp(invoice_bon), size=14, weight=ft.FontWeight.W_500)]),
     ], spacing=32)
 
     # PENTING: back_route TIDAK boleh ke /invoices/{folder_id} lagi --
@@ -231,7 +246,7 @@ def build_view(page: ft.Page, invoice_id: int):
     else:
         back_route = "/invoices"
 
-    sisa_hutang_nilai, sisa_hutang_bg, sisa_hutang_text = hutang_style(sisa_hutang_toko)
+    sisa_hutang_nilai, light_sisa_hutang_bg, light_sisa_hutang_text,dark_sisa_hutang_bg, dark_sisa_hutang_text  = hutang_style(sisa_hutang_toko)
     sisa_barang_display = rp(sisa_barang_manual) if sisa_barang_manual is not None else "Belum diisi"
 
     body = ft.Column([
@@ -241,7 +256,7 @@ def build_view(page: ft.Page, invoice_id: int):
             ft.OutlinedButton("Export ke PDF", icon=ft.Icons.PICTURE_AS_PDF, on_click=export_pdf),
         ]),
         ft.Container(height=8),
-        ft.Container(header_info, bgcolor=ft.Colors.GREY_50, padding=16, border_radius=10),
+        ft.Container(header_info, padding=16, border_radius=10),
         ft.Container(height=20),
         ft.Row([
             ft.Text("Transaksi Harian", size=16, weight=ft.FontWeight.W_500, expand=True),
@@ -253,19 +268,19 @@ def build_view(page: ft.Page, invoice_id: int):
         ft.Text("Ringkasan", size=16, weight=ft.FontWeight.W_500),
         ft.Container(height=8),
         ft.ResponsiveRow([
-            ft.Container(col=3, content=metric_card("Sisa Hutang Toko", rp(sisa_hutang_nilai), color=sisa_hutang_bg, text_color=sisa_hutang_text)),
+            ft.Container(col=3, content=metric_card(page, "Sisa Hutang Toko", rp(sisa_hutang_nilai), light_sisa_hutang_bg, light_sisa_hutang_text, dark_sisa_hutang_bg, dark_sisa_hutang_text)),
             ft.Container(
                 col=3,
                 content=ft.Stack([
-                    metric_card("Sisa Barang di Toko", sisa_barang_display),
+                    metric_card(page, "Sisa Barang di Toko", sisa_barang_display, ft.Colors.WHITE, ft.Colors.GREY_400, ft.Colors.GREY_900, ft.Colors.WHITE),
                     ft.Container(
                         content=ft.IconButton(ft.Icons.EDIT, icon_size=16, tooltip="Update sisa barang (cek fisik)", on_click=open_sisa_barang_dialog),
                         alignment=ft.Alignment.TOP_RIGHT,
                     ),
                 ]),
             ),
-            ft.Container(col=3, content=metric_card("Omset Penjualan", rp(omset_penjualan))),
-            ft.Container(col=3, content=metric_card("Laba Bersih", rp(laba_bersih), color=ft.Colors.GREEN_50, text_color=ft.Colors.GREEN_900)),
+            ft.Container(col=3, content=metric_card(page, "Omset Penjualan", rp(omset_penjualan), ft.Colors.BLUE_50, ft.Colors.BLUE_900, ft.Colors.BLUE_900, ft.Colors.WHITE)),
+            ft.Container(col=3, content=metric_card(page, "Laba Bersih", rp(laba_bersih), ft.Colors.GREEN_50, ft.Colors.GREEN_900, ft.Colors.GREEN_900, ft.Colors.WHITE)),
         ], spacing=12),
     ], scroll=ft.ScrollMode.AUTO, expand=True)
     return body

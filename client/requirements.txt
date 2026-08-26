@@ -1,6 +1,4 @@
 flet==0.86.5
 flet-charts==0.86.5
-psycopg2-binary
-bcrypt
 reportlab
 requests

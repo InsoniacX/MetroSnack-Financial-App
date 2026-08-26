@@ -35,6 +35,7 @@ def main(page: ft.Page):
     page.window.height = 750
     page.padding = 0
     page.theme_mode = ft.ThemeMode.LIGHT
+    page.window.icon = "METROSNACK_bgremoved.png"
     
 
     def refresh_current_view():
