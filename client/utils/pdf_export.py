@@ -5,6 +5,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from utils.formatting import rp
 from utils.hutang_calc import hutang_amount
+from io import BytesIO
 
 _styles = getSampleStyleSheet()
 _style_invoice_title = ParagraphStyle(
@@ -53,7 +54,7 @@ def _ringkasan_paragraph(sisa_hutang, omset, laba_bersih):
     )
 
 
-def generate_invoice_pdf(invoice_header, transaksi, output_path):
+def generate_invoice_pdf(invoice_header, transaksi, output_path=None):
     """
     invoice_header: tuple (id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, folder_bulan_id, cabang_id, sisa_barang_manual)
     -> hasil dari db.invoice_repo.get_invoice_header() / get_invoice_full()
@@ -66,8 +67,10 @@ def generate_invoice_pdf(invoice_header, transaksi, output_path):
     total_barang = sum(t[2] for t in transaksi) if transaksi else 0
     laba_bersih = total_uang - total_barang
     sisa_hutang = (invoice_bon or 0) + total_barang - total_uang
+    buffer = BytesIO()
+    target = output_path if isinstance(output_path, str) else buffer
 
-    doc = SimpleDocTemplate(output_path, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
+    doc = SimpleDocTemplate(target, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
     elements = [
         Paragraph(f"Detail Invoice - {no_laporan or f'#{iid}'}", _styles["Title"]),
         Paragraph(
@@ -84,6 +87,9 @@ def generate_invoice_pdf(invoice_header, transaksi, output_path):
         _ringkasan_paragraph(sisa_hutang, total_uang, laba_bersih),
     ]
     doc.build(elements)
+
+    if output_path is None:
+        return buffer.getvalue()
 
 
 def _folder_section_elements(nama_folder, invoices_with_transaksi, heading_style):
@@ -153,7 +159,7 @@ def _folder_section_elements(nama_folder, invoices_with_transaksi, heading_style
     return elements, total_omzet_all, total_laba_all, total_hutang_all
 
 
-def generate_folder_pdf(nama_folder, invoices_with_transaksi, output_path):
+def generate_folder_pdf(nama_folder, invoices_with_transaksi, output_path=None):
     """
     invoices_with_transaksi: list of dict, tiap item:
         {"header": (id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, total_omzet, total_barang),
@@ -161,7 +167,9 @@ def generate_folder_pdf(nama_folder, invoices_with_transaksi, output_path):
     "header" -> baris dari db.invoice_repo.get_invoices()
     "transaksi" -> hasil db.transaksi_repo.get_transaksi(invoice_id) untuk invoice itu
     """
-    doc = SimpleDocTemplate(output_path, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
+    buffer = BytesIO()
+    target = output_path if isinstance(output_path, str) else buffer
+    doc = SimpleDocTemplate(target, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
     elements = [Paragraph(f"Laporan Keuangan - {nama_folder}", _styles["Title"]), Spacer(1, 12)]
 
     section_elements, _, _, _ = _folder_section_elements(nama_folder, invoices_with_transaksi, _styles["Heading2"])
@@ -170,15 +178,19 @@ def generate_folder_pdf(nama_folder, invoices_with_transaksi, output_path):
     elements.extend(section_elements[2:] if len(section_elements) > 2 else section_elements)
 
     doc.build(elements)
+    if output_path is None:
+        return buffer.getvalue()
 
 
-def generate_cabang_pdf(nama_cabang, folders_data, output_path):
+def generate_cabang_pdf(nama_cabang, folders_data, output_path=None):
     """
     folders_data: list of dict, tiap item:
         {"nama_folder": "Januari 2026", "invoices_with_transaksi": [ ... sama seperti generate_folder_pdf ... ]}
     Urutkan folders_data dari yang lama ke baru sebelum dipanggil (biar laporan runtut).
     """
-    doc = SimpleDocTemplate(output_path, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
+    buffer = BytesIO()
+    target = output_path if isinstance(output_path, str) else buffer
+    doc = SimpleDocTemplate(target, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
     elements = [Paragraph(f"Laporan Keuangan Cabang - {nama_cabang}", _styles["Title"]), Spacer(1, 4)]
 
     grand_omzet = 0
@@ -209,3 +221,5 @@ def generate_cabang_pdf(nama_cabang, folders_data, output_path):
         elements.extend(section_elements)
 
     doc.build(elements)
+    if output_path is None:
+        return buffer.getvalue()

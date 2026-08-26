@@ -166,16 +166,7 @@ def build_view(page: ft.Page, folder_id: int):
 
     async def export_pdf(e):
         nama_file_default = f"Laporan_{nama_folder.replace(' ', '_')}.pdf"
-        save_path = await export_picker.save_file(
-            dialog_title="Simpan laporan PDF",
-            file_name=nama_file_default,
-            file_type=ft.FilePickerFileType.CUSTOM,
-            allowed_extensions=["pdf"],
-        )
-        if not save_path:
-            return
-        if not save_path.lower().endswith(".pdf"):
-            save_path += ".pdf"
+
         try:
             # BARU: ambil detail transaksi harian tiap invoice, supaya PDF
             # folder juga menampilkan rincian per hari (bukan cuma ringkasan).
@@ -188,7 +179,29 @@ def build_view(page: ft.Page, folder_id: int):
                     transaksi = []
                 invoices_with_transaksi.append({"header": inv, "transaksi": transaksi})
 
-            generate_folder_pdf(nama_folder, invoices_with_transaksi, save_path)
+            if page.platform == ft.PagePlatform.ANDROID or page.platform == ft.PagePlatform.IOS:
+                pdf_bytes = generate_folder_pdf(nama_folder, invoices_with_transaksi, None)
+                save_path = await export_picker.save_file(
+                    dialog_title="Simpan laporan PDF",
+                    file_name=nama_file_default,
+                    file_type=ft.FilePickerFileType.CUSTOM,
+                    allowed_extensions=["pdf"],
+                    src_bytes=pdf_bytes,
+                )
+            else:
+                save_path = await export_picker.save_file(
+                    dialog_title="Simpan laporan PDF",
+                    file_name=nama_file_default,
+                    file_type=ft.FilePickerFileType.CUSTOM,
+                    allowed_extensions=["pdf"],
+                )
+                if not save_path:
+                    return
+                if not save_path.lower().endswith(".pdf"):
+                    save_path += ".pdf"
+                generate_folder_pdf(nama_folder, invoices_with_transaksi, save_path)
+            if not save_path:
+                return
             log_activity(actor["id"], actor["username"], "CREATE", "export_pdf", folder_id, f"Export PDF folder {nama_folder}", folder_cabang_id)
             page.show_dialog(ft.SnackBar(ft.Text(f"PDF berhasil disimpan: {save_path}"), bgcolor=ft.Colors.GREEN_700))
         except Exception as ex:

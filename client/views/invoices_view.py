@@ -265,17 +265,6 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
 
         label_cabang = nama_cabang_label or "Cabang"
         nama_file_default = f"Laporan_Cabang_{label_cabang.replace(' ', '_')}.pdf"
-        save_path = await export_picker.save_file(
-            dialog_title="Simpan laporan PDF cabang",
-            file_name=nama_file_default,
-            file_type=ft.FilePickerFileType.CUSTOM,
-            allowed_extensions=["pdf"],
-        )
-        if not save_path:
-            return
-        if not save_path.lower().endswith(".pdf"):
-            save_path += ".pdf"
-
         try:
             # Urutkan folder dari yang lama ke baru supaya laporan runtut
             # (get_folders() mengembalikan urutan terbaru dulu).
@@ -294,8 +283,28 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
                         transaksi = []
                     invoices_with_transaksi.append({"header": inv, "transaksi": transaksi})
                 folders_data.append({"nama_folder": nama_folder, "invoices_with_transaksi": invoices_with_transaksi})
+                
+            if page.platform == ft.PagePlatform.ANDROID or page.platform == ft.PagePlatform.IOS:
+                pdf_bytes = generate_cabang_pdf(label_cabang, folders_data, None)
+                save_path = await export_picker.save_file(
+                    dialog_title="Simpan laporan PDF cabang", 
+                    file_name=nama_file_default,
+                    file_type=ft.FilePickerFileType.CUSTOM,
+                    allowed_extensions=["pdf"],
+                    src_bytes=pdf_bytes)
+            else:
+                save_path = await export_picker.save_file(
+                    dialog_title="Simpan laporan PDF cabang",
+                    file_name=nama_file_default,
+                    file_type=ft.FilePickerFileType.CUSTOM,
+                    allowed_extensions=["pdf"],
+                )
+                if not save_path:
+                    return
+                if not save_path.lower().endswith(".pdf"):
+                    save_path += ".pdf"
+                generate_cabang_pdf(label_cabang, folders_data, save_path)
 
-            generate_cabang_pdf(label_cabang, folders_data, save_path)
             log_activity(actor["id"], actor["username"], "CREATE", "export_pdf", cabang_id, f"Export PDF cabang {label_cabang}", cabang_id)
             page.show_dialog(ft.SnackBar(ft.Text(f"PDF berhasil disimpan: {save_path}"), bgcolor=ft.Colors.GREEN_700))
         except Exception as ex:
