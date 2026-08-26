@@ -22,6 +22,7 @@ env/
 ENV/
 backend/venv/
 client/venv/
+MetroSnack.spec
 
 # ------------------------------------------------------------
 # Environment / secrets
@@ -127,3 +128,5 @@ yarn-error.log*
 # ------------------------------------------------------------
 *.pid
 *.seed
+client/generated-b56781a656f90d4434ed5d9f54aba0d3893b7e5df52ffdf68ccade85f066a38a.ico
+client/pyproject.toml
