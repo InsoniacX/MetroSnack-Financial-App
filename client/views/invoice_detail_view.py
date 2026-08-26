@@ -231,7 +231,7 @@ def build_view(page: ft.Page, invoice_id: int):
     else:
         back_route = "/invoices"
 
-    sisa_hutang_nilai, sisa_hutang_bg, sisa_hutang_text = hutang_style(sisa_hutang_toko)
+    sisa_hutang_nilai, light_sisa_hutang_bg, light_sisa_hutang_text,dark_sisa_hutang_bg, dark_sisa_hutang_text  = hutang_style(sisa_hutang_toko)
     sisa_barang_display = rp(sisa_barang_manual) if sisa_barang_manual is not None else "Belum diisi"
 
     body = ft.Column([
@@ -253,19 +253,19 @@ def build_view(page: ft.Page, invoice_id: int):
         ft.Text("Ringkasan", size=16, weight=ft.FontWeight.W_500),
         ft.Container(height=8),
         ft.ResponsiveRow([
-            ft.Container(col=3, content=metric_card("Sisa Hutang Toko", rp(sisa_hutang_nilai), color=sisa_hutang_bg, text_color=sisa_hutang_text)),
+            ft.Container(col=3, content=metric_card(page, "Sisa Hutang Toko", rp(sisa_hutang_nilai), light_sisa_hutang_bg, light_sisa_hutang_text, dark_sisa_hutang_bg, dark_sisa_hutang_text)),
             ft.Container(
                 col=3,
                 content=ft.Stack([
-                    metric_card("Sisa Barang di Toko", sisa_barang_display),
+                    metric_card(page, "Sisa Barang di Toko", sisa_barang_display, ft.Colors.WHITE, ft.Colors.GREY_400, ft.Colors.GREY_900, ft.Colors.WHITE),
                     ft.Container(
                         content=ft.IconButton(ft.Icons.EDIT, icon_size=16, tooltip="Update sisa barang (cek fisik)", on_click=open_sisa_barang_dialog),
                         alignment=ft.Alignment.TOP_RIGHT,
                     ),
                 ]),
             ),
-            ft.Container(col=3, content=metric_card("Omset Penjualan", rp(omset_penjualan))),
-            ft.Container(col=3, content=metric_card("Laba Bersih", rp(laba_bersih), color=ft.Colors.GREEN_50, text_color=ft.Colors.GREEN_900)),
+            ft.Container(col=3, content=metric_card(page, "Omset Penjualan", rp(omset_penjualan), ft.Colors.BLUE_50, ft.Colors.BLUE_900, ft.Colors.BLUE_900, ft.Colors.WHITE)),
+            ft.Container(col=3, content=metric_card(page, "Laba Bersih", rp(laba_bersih), ft.Colors.GREEN_50, ft.Colors.GREEN_900, ft.Colors.GREEN_900, ft.Colors.WHITE)),
         ], spacing=12),
     ], scroll=ft.ScrollMode.AUTO, expand=True)
     return body
