@@ -60,7 +60,6 @@ def main(page: ft.Page):
         navrail = nav_rail(
             page,
             get_selected_index(route),
-            appbar,
             refresh_current_view,
         )
 
@@ -86,6 +85,7 @@ def main(page: ft.Page):
 
     def route_change(route):
         page.views.clear()
+        page.overlay.clear()
         r = page.route
 
         if not app_state.is_logged_in() and r != "/login":
@@ -133,7 +133,7 @@ def main(page: ft.Page):
             page.views.append(folder_detail_view.build_view(page, folder_id))
         elif r.startswith("/invoice/"):
             invoice_id = int(r.split("/")[2])
-            body = invoice_detail_view.build_view(page, invoice_id)
+            body = invoice_detail_view.build_view(page, invoice_id, refresh_current_view)
             page.views.append(create_view(r, "Detail Invoice", body))
         elif r == "/users":
             body = users_view.build_view(page)

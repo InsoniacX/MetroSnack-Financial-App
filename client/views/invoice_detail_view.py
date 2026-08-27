@@ -13,9 +13,10 @@ from db.activity_repo import log_activity
 from state import app_state
 
 
-def build_view(page: ft.Page, invoice_id: int):
+def build_view(page: ft.Page, invoice_id: int, refresh_current_view):
     def refresh():
-        page.views[-1] = build_view(page, invoice_id)
+        refresh_current_view()
+        # page.views[-1] = build_view(page, invoice_id, refresh_current_view)
         page.update()
 
     actor = app_state.user
@@ -42,7 +43,8 @@ def build_view(page: ft.Page, invoice_id: int):
     omset_penjualan = total_uang
     laba_bersih = total_uang - total_barang
     sisa_hutang_toko = (invoice_bon or 0) + total_barang - total_uang
-
+    akumulasi_kurang_uang = Decimal(0)
+    akumulasi_lebih_uang = Decimal(0)
     def hapus_baris(tid, tanggal_str):
         try:
             delete_transaksi(tid)
@@ -69,7 +71,6 @@ def build_view(page: ft.Page, invoice_id: int):
             update_transaksi(tid, tanggal_val, barang_val, uang_val, nota_val)
             log_activity(actor["id"], actor["username"], "UPDATE", "transaksi_harian", tid, f"Mengubah transaksi {tanggal_val.strftime('%d-%m-%Y')} di invoice {no_laporan or invoice_id}", invoice_cabang_id)
             page.pop_dialog()
-            page.update()
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -104,6 +105,10 @@ def build_view(page: ft.Page, invoice_id: int):
         bg = ft.Colors.GREEN_50 if ket == "Lebih Uang" else ft.Colors.RED_50
         dark_bg = ft.Colors.GREEN_700 if ket == "Lebih Uang" else ft.Colors.RED_700
         tgl_str = ttgl.strftime("%d-%m-%Y")
+        if ket == "Kurang Uang":
+            akumulasi_kurang_uang += lk
+        elif ket == "Lebih Uang":
+            akumulasi_lebih_uang += lk
         rows.append(ft.DataRow(cells=[
             ft.DataCell(ft.Text(tgl_str)),
             ft.DataCell(ft.Text(rp(mbarang))),
@@ -143,7 +148,6 @@ def build_view(page: ft.Page, invoice_id: int):
             log_activity(actor["id"], actor["username"], "CREATE", "transaksi_harian", invoice_id, f"Tambah transaksi {tanggal_val.strftime('%d-%m-%Y')} di invoice {no_laporan or invoice_id}",
                          invoice_cabang_id)
             page.pop_dialog()
-            page.update()
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -162,7 +166,11 @@ def build_view(page: ft.Page, invoice_id: int):
         ],
     )
 
-    def open_dialog(e):
+    def open_tambah_dialog(e):
+        tgl_field.value = date.today().isoformat()
+        barang_field.value = "0"
+        uang_field.value = "0"
+        nota_field.value = ""
         page.show_dialog(dlg)
 
     sisa_barang_field = ft.TextField(label="Sisa Barang di Toko (Rp)", width=220)
@@ -173,7 +181,6 @@ def build_view(page: ft.Page, invoice_id: int):
             update_sisa_barang_manual(invoice_id, nilai)
             log_activity(actor["id"], actor["username"], "UPDATE", "invoice", invoice_id, f"Update Sisa Barang di Toko: {nilai}", invoice_cabang_id)
             page.pop_dialog()
-            page.update()
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -260,27 +267,54 @@ def build_view(page: ft.Page, invoice_id: int):
         ft.Container(height=20),
         ft.Row([
             ft.Text("Transaksi Harian", size=16, weight=ft.FontWeight.W_500, expand=True),
-            ft.ElevatedButton("Tambah baris transaksi", icon=ft.Icons.ADD, on_click=open_dialog, bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE),
+            ft.ElevatedButton("Tambah baris transaksi", icon=ft.Icons.ADD, on_click=open_tambah_dialog, bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE),
         ]),
         ft.Container(height=8),
         ft.Row([table], scroll=ft.ScrollMode.AUTO),
+        ft.Container(height=12),
+        ft.ResponsiveRow([
+            ft.Container(
+                col={"xs": 12, "sm": 6},
+                content=metric_card(
+                    page,
+                    "Akumulasi Kurang Uang",
+                    rp(akumulasi_kurang_uang * -1),
+                    light_color=ft.Colors.RED_50,
+                    light_text_color=ft.Colors.RED_900,
+                    dark_color=ft.Colors.RED_900,
+                    dark_text_color=ft.Colors.RED_100,
+                ),
+            ),
+            ft.Container(
+                col={"xs": 12, "sm": 6},
+                content=metric_card(
+                    page,
+                    "Akumulasi Lebih Uang",
+                    rp(akumulasi_lebih_uang),
+                    light_color=ft.Colors.GREEN_50,
+                    light_text_color=ft.Colors.GREEN_900,
+                    dark_color=ft.Colors.GREEN_900,
+                    dark_text_color=ft.Colors.GREEN_100,
+                ),
+            ),
+        ], spacing=12),
         ft.Container(height=24),
         ft.Text("Ringkasan", size=16, weight=ft.FontWeight.W_500),
         ft.Container(height=8),
         ft.ResponsiveRow([
-            ft.Container(col=3, content=metric_card(page, "Sisa Hutang Toko", rp(sisa_hutang_nilai), light_sisa_hutang_bg, light_sisa_hutang_text, dark_sisa_hutang_bg, dark_sisa_hutang_text)),
+            ft.Container(col={"xs": 12, "sm": 6, "md": 3}, content=metric_card(page, "Sisa Hutang Toko", rp(sisa_hutang_nilai), light_sisa_hutang_bg, light_sisa_hutang_text, dark_sisa_hutang_bg, dark_sisa_hutang_text)),
             ft.Container(
-                col=3,
+                col={"xs": 12, "sm": 6, "md": 3},
                 content=ft.Stack([
-                    metric_card(page, "Sisa Barang di Toko", sisa_barang_display, ft.Colors.WHITE, ft.Colors.GREY_400, ft.Colors.GREY_900, ft.Colors.WHITE),
+                    metric_card(page, "Sisa Barang di Toko", sisa_barang_display, ft.Colors.WHITE, ft.Colors.GREY_900, ft.Colors.GREY_900, ft.Colors.WHITE),
                     ft.Container(
                         content=ft.IconButton(ft.Icons.EDIT, icon_size=16, tooltip="Update sisa barang (cek fisik)", on_click=open_sisa_barang_dialog),
                         alignment=ft.Alignment.TOP_RIGHT,
                     ),
                 ]),
             ),
-            ft.Container(col=3, content=metric_card(page, "Omset Penjualan", rp(omset_penjualan), ft.Colors.BLUE_50, ft.Colors.BLUE_900, ft.Colors.BLUE_900, ft.Colors.WHITE)),
-            ft.Container(col=3, content=metric_card(page, "Laba Bersih", rp(laba_bersih), ft.Colors.GREEN_50, ft.Colors.GREEN_900, ft.Colors.GREEN_900, ft.Colors.WHITE)),
+            ft.Container(col={"xs": 12, "sm": 6, "md": 3}, content=metric_card(page, "Omset Penjualan", rp(omset_penjualan), ft.Colors.BLUE_50, ft.Colors.BLUE_900, ft.Colors.BLUE_900, ft.Colors.WHITE)),
+            ft.Container(col={"xs": 12, "sm": 6, "md": 3}, content=metric_card(page, "Laba Bersih", rp(laba_bersih), ft.Colors.GREEN_50, ft.Colors.GREEN_900, ft.Colors.GREEN_900, ft.Colors.WHITE)),
         ], spacing=12),
     ], scroll=ft.ScrollMode.AUTO, expand=True)
     return body

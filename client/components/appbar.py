@@ -33,7 +33,7 @@ def build_appbar(page, title):
     )
     
 
-def nav_rail(page, selected_index, appbar, refresh_current_view):
+def nav_rail(page, selected_index, refresh_current_view):
     is_dark = page.theme_mode == ft.ThemeMode.DARK
     is_admin = app_state.user and app_state.user.get("role") == "admin"
     is_pusat = app_state.user and app_state.user.get("cabang_id") is None
