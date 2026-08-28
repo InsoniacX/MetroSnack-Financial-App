@@ -13,11 +13,31 @@ from db.activity_repo import log_activity
 from state import app_state
 
 
-def build_view(page: ft.Page, invoice_id: int, refresh_current_view):
-    def refresh():
-        refresh_current_view()
-        # page.views[-1] = build_view(page, invoice_id, refresh_current_view)
+def build_view(page: ft.Page, invoice_id: int):
+    def close_dialog(e):
+        page.pop_dialog()
         page.update()
+
+    def refresh():
+        if page.views and len(page.views[-1].controls) > 0:
+            row_control = page.views[-1].controls[0]
+            if hasattr(row_control, "controls") and len(row_control.controls) >= 3:
+                row_control.controls[2].content = build_view(page, invoice_id)
+                page.update()
+                return
+        page.update()
+
+    refresh_table = refresh
+
+    def table_build(transaksi_data):
+        return ft.DataTable(
+            columns=[
+                ft.DataColumn(ft.Text("Tanggal")), ft.DataColumn(ft.Text("Masuk Barang")),
+                ft.DataColumn(ft.Text("Masuk Uang")), ft.DataColumn(ft.Text("Lebih / Kurang Uang")),
+                ft.DataColumn(ft.Text("Nota")), ft.DataColumn(ft.Text("Aksi")),
+            ],
+            rows=build_rows(transaksi_data),
+        )
 
     actor = app_state.user
     is_pusat = actor.get("cabang_id") is None
@@ -43,8 +63,9 @@ def build_view(page: ft.Page, invoice_id: int, refresh_current_view):
     omset_penjualan = total_uang
     laba_bersih = total_uang - total_barang
     sisa_hutang_toko = (invoice_bon or 0) + total_barang - total_uang
-    akumulasi_kurang_uang = Decimal(0)
-    akumulasi_lebih_uang = Decimal(0)
+    akumulasi_kurang_uang = sum([t[4] for t in transaksi if t[5] == "Kurang Uang"]) if transaksi else Decimal(0)
+    akumulasi_lebih_uang = sum([t[4] for t in transaksi if t[5] == "Lebih Uang"]) if transaksi else Decimal(0)
+
     def hapus_baris(tid, tanggal_str):
         try:
             delete_transaksi(tid)
@@ -70,7 +91,7 @@ def build_view(page: ft.Page, invoice_id: int, refresh_current_view):
             nota_val = (edit_nota_field.value or "").strip() or None
             update_transaksi(tid, tanggal_val, barang_val, uang_val, nota_val)
             log_activity(actor["id"], actor["username"], "UPDATE", "transaksi_harian", tid, f"Mengubah transaksi {tanggal_val.strftime('%d-%m-%Y')} di invoice {no_laporan or invoice_id}", invoice_cabang_id)
-            page.pop_dialog()
+            close_dialog(e)
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -97,41 +118,32 @@ def build_view(page: ft.Page, invoice_id: int, refresh_current_view):
         edit_nota_field.value = nota or ""
         page.show_dialog(edit_dlg)
 
-    rows = []
-    for t in transaksi:
-        tid, ttgl, mbarang, muang, lk, ket, nota = t
-        warna = ft.Colors.GREEN_700 if ket == "Lebih Uang" else ft.Colors.RED_700
-        dark_warna = ft.Colors.GREEN_50 if ket == "Lebih Uang" else ft.Colors.RED_50
-        bg = ft.Colors.GREEN_50 if ket == "Lebih Uang" else ft.Colors.RED_50
-        dark_bg = ft.Colors.GREEN_700 if ket == "Lebih Uang" else ft.Colors.RED_700
-        tgl_str = ttgl.strftime("%d-%m-%Y")
-        if ket == "Kurang Uang":
-            akumulasi_kurang_uang += lk
-        elif ket == "Lebih Uang":
-            akumulasi_lebih_uang += lk
-        rows.append(ft.DataRow(cells=[
-            ft.DataCell(ft.Text(tgl_str)),
-            ft.DataCell(ft.Text(rp(mbarang))),
-            ft.DataCell(ft.Text(rp(muang))),
-            ft.DataCell(ft.Container(
-                content=ft.Text(f"{rp(lk)}  ({ket})", size=12, color=dark_warna if is_dark else warna),
-                bgcolor=dark_bg if is_dark else bg, padding=ft.Padding.symmetric(vertical=4, horizontal=8), border_radius=6,
-            )),
-            ft.DataCell(ft.Text(nota or "-", size=12, color=ft.Colors.GREY_700)),
-            ft.DataCell(ft.Row([
-                ft.IconButton(ft.Icons.EDIT, tooltip="Edit", on_click=lambda e, tid=tid, tt=ttgl, mb=mbarang, mu=muang, nt=nota: open_edit_dialog(tid, tt, mb, mu, nt)),
-                ft.IconButton(ft.Icons.DELETE, icon_color=ft.Colors.RED_400, tooltip="Hapus", on_click=lambda e, tid=tid, ts=tgl_str: hapus_baris(tid, ts)),
-            ])),
-        ]))
+    def build_rows(data_transaksi):
+        rows = []
+        for t in data_transaksi:
+            tid, ttgl, mbarang, muang, lk, ket, nota = t
+            warna = ft.Colors.GREEN_700 if ket == "Lebih Uang" else ft.Colors.RED_700
+            dark_warna = ft.Colors.GREEN_50 if ket == "Lebih Uang" else ft.Colors.RED_50
+            bg = ft.Colors.GREEN_50 if ket == "Lebih Uang" else ft.Colors.RED_50
+            dark_bg = ft.Colors.GREEN_700 if ket == "Lebih Uang" else ft.Colors.RED_700
+            tgl_str = ttgl.strftime("%d-%m-%Y") if ttgl else "-"
+            rows.append(ft.DataRow(cells=[
+                ft.DataCell(ft.Text(tgl_str)),
+                ft.DataCell(ft.Text(rp(mbarang))),
+                ft.DataCell(ft.Text(rp(muang))),
+                ft.DataCell(ft.Container(
+                    content=ft.Text(f"{rp(lk)}  ({ket})", size=12, color=dark_warna if is_dark else warna),
+                    bgcolor=dark_bg if is_dark else bg, padding=ft.Padding.symmetric(vertical=4, horizontal=8), border_radius=6,
+                )),
+                ft.DataCell(ft.Text(nota or "-", size=12, color=ft.Colors.GREY_700)),
+                ft.DataCell(ft.Row([
+                    ft.IconButton(ft.Icons.EDIT, tooltip="Edit", on_click=lambda e, tid=tid, tt=ttgl, mb=mbarang, mu=muang, nt=nota: open_edit_dialog(tid, tt, mb, mu, nt)),
+                    ft.IconButton(ft.Icons.DELETE, icon_color=ft.Colors.RED_400, tooltip="Hapus", on_click=lambda e, tid=tid, ts=tgl_str: hapus_baris(tid, ts)),
+                ])),
+            ]))
+        return rows
 
-    table = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("Tanggal")), ft.DataColumn(ft.Text("Masuk Barang")),
-            ft.DataColumn(ft.Text("Masuk Uang")), ft.DataColumn(ft.Text("Lebih / Kurang Uang")),
-            ft.DataColumn(ft.Text("Nota")), ft.DataColumn(ft.Text("Aksi")),
-        ],
-        rows=rows,
-    )
+    table = table_build(transaksi)
 
     tgl_field = ft.TextField(label="Tanggal (YYYY-MM-DD)", width=200, value=date.today().isoformat())
     barang_field = ft.TextField(label="Masuk Barang (Rp)", width=200, value="0")
@@ -147,7 +159,7 @@ def build_view(page: ft.Page, invoice_id: int, refresh_current_view):
             add_transaksi(invoice_id, tanggal_val, barang_val, uang_val, nota_val)
             log_activity(actor["id"], actor["username"], "CREATE", "transaksi_harian", invoice_id, f"Tambah transaksi {tanggal_val.strftime('%d-%m-%Y')} di invoice {no_laporan or invoice_id}",
                          invoice_cabang_id)
-            page.pop_dialog()
+            close_dialog(e)
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -161,7 +173,7 @@ def build_view(page: ft.Page, invoice_id: int, refresh_current_view):
             ft.Row([uang_field, nota_field]),
         ], tight=True, spacing=10),
         actions=[
-            ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
+            ft.TextButton("Batal", on_click=close_dialog),
             ft.ElevatedButton("Simpan", on_click=submit_baris),
         ],
     )
@@ -180,8 +192,8 @@ def build_view(page: ft.Page, invoice_id: int, refresh_current_view):
             nilai = parse_positive_decimal("Sisa Barang di Toko", sisa_barang_field.value)
             update_sisa_barang_manual(invoice_id, nilai)
             log_activity(actor["id"], actor["username"], "UPDATE", "invoice", invoice_id, f"Update Sisa Barang di Toko: {nilai}", invoice_cabang_id)
-            page.pop_dialog()
-            refresh()
+            close_dialog(e)
+            refresh_table()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
         except Exception as ex:

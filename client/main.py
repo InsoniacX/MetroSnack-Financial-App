@@ -5,7 +5,7 @@ from config import APP_TITLE
 from db.folder_repo import get_invoice_ids
 from views import (
     folder_cabang_view, login_view, dashboard_view, invoices_view, folder_detail_view,
-    invoice_detail_view, users_view, activity_log_view, cabang_view,
+    invoice_detail_view, users_view, activity_log_view, cabang_view, pendapatan_pengeluaran_view,
 )
 
 
@@ -42,17 +42,31 @@ def main(page: ft.Page):
         route_change(page.route)
 
     def get_selected_index(route):
+        is_admin = app_state.user and app_state.user.get("role") == "admin"
+        is_pusat = app_state.user and app_state.user.get("cabang_id") is None
+
+        routes = ["/dashboard", "/invoices", "/pendapatan-pengeluaran"]
+        if is_admin:
+            routes.extend(["/users", "/activity-log"])
+        if is_pusat:
+            routes.append("/cabang")
+
         if route.startswith("/dashboard"):
-            return 0
+            target = "/dashboard"
         elif route.startswith("/invoices") or route.startswith("/invoice"):
-            return 1
+            target = "/invoices"
+        elif route.startswith("/pendapatan-pengeluaran"):
+            target = "/pendapatan-pengeluaran"
         elif route == "/users":
-            return 2
+            target = "/users"
         elif route == "/activity-log":
-            return 3
+            target = "/activity-log"
         elif route == "/cabang":
-            return 4
-        return 0
+            target = "/cabang"
+        else:
+            return 0
+
+        return routes.index(target) if target in routes else 0
 
     def create_view(route, title, body):
         appbar = build_appbar(page, title)
@@ -85,7 +99,6 @@ def main(page: ft.Page):
 
     def route_change(route):
         page.views.clear()
-        page.overlay.clear()
         r = page.route
 
         if not app_state.is_logged_in() and r != "/login":
@@ -130,11 +143,15 @@ def main(page: ft.Page):
                 page.go(f"/invoice/{invoice_ids[0]}")
                 return
             page.views.pop()
-            page.views.append(folder_detail_view.build_view(page, folder_id))
+            body = folder_detail_view.build_view(page, folder_id)
+            page.views.append(create_view(r, "Detail Folder", body))
         elif r.startswith("/invoice/"):
             invoice_id = int(r.split("/")[2])
-            body = invoice_detail_view.build_view(page, invoice_id, refresh_current_view)
-            page.views.append(create_view(r, "Detail Invoice", body))
+            body = invoice_detail_view.build_view(page, invoice_id)
+            page.views.append(create_view(r, "Detail Folder", body))
+        elif r.startswith("/pendapatan-pengeluaran"):
+            body = pendapatan_pengeluaran_view.build_view(page)
+            page.views.append(create_view(r, "Pendapatan & Pengeluaran", body))
         elif r == "/users":
             body = users_view.build_view(page)
             page.views.append(create_view("/users", "Kelola User", body))
