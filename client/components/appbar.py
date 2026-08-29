@@ -52,9 +52,10 @@ def nav_rail(page, selected_index, refresh_current_view):
     destinations = [
         ft.NavigationRailDestination(icon=ft.Icons.DASHBOARD_OUTLINED, selected_icon=ft.Icons.DASHBOARD, label="Dashboard"),
         ft.NavigationRailDestination(icon=ft.Icons.DESCRIPTION_OUTLINED, selected_icon=ft.Icons.DESCRIPTION, label="Invoice"),
-        ft.NavigationRailDestination(icon=ft.Icons.SWAP_HORIZ_OUTLINED, selected_icon=ft.Icons.SWAP_HORIZ, label="Kas"),
+        # ft.NavigationRailDestination(icon=ft.Icons.SWAP_HORIZ_OUTLINED, selected_icon=ft.Icons.SWAP_HORIZ, label="Kas"),
     ]
-    routes = ["/dashboard", "/invoices", "/pendapatan-pengeluaran"]
+    routes = ["/dashboard", "/invoices"]
+    # "/pendapatan-pengeluaran"
 
     if is_admin:
         destinations.append(
