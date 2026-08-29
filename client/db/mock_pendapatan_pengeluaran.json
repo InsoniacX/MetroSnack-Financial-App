@@ -1,0 +1,101 @@
+[
+  {
+    "id": 1,
+    "cabang_id": 1,
+    "nama_cabang": "Cabang Utama",
+    "tanggal": "2026-08-01",
+    "jenis": "Pendapatan",
+    "kategori": "Penjualan Langsung",
+    "nominal": 4500000,
+    "keterangan": "Penjualan snack harian toko",
+    "nota": "NOTA-0801"
+  },
+  {
+    "id": 2,
+    "cabang_id": 1,
+    "nama_cabang": "Cabang Utama",
+    "tanggal": "2026-08-02",
+    "jenis": "Pengeluaran",
+    "kategori": "Bahan Baku",
+    "nominal": 1200000,
+    "keterangan": "Beli stok kemasan & bumbu",
+    "nota": "NOTA-0802"
+  },
+  {
+    "id": 3,
+    "cabang_id": 1,
+    "nama_cabang": "Cabang Utama",
+    "tanggal": "2026-08-05",
+    "jenis": "Pengeluaran",
+    "kategori": "Operasional",
+    "nominal": 350000,
+    "keterangan": "Biaya listrik dan air toko",
+    "nota": "PLN-AUG-26"
+  },
+  {
+    "id": 4,
+    "cabang_id": 2,
+    "nama_cabang": "Cabang Barat",
+    "tanggal": "2026-08-10",
+    "jenis": "Pendapatan",
+    "kategori": "Penjualan Grosir",
+    "nominal": 7800000,
+    "keterangan": "Order partai besar mitra reseller",
+    "nota": "INV-GRS-001"
+  },
+  {
+    "id": 5,
+    "cabang_id": 2,
+    "nama_cabang": "Cabang Barat",
+    "tanggal": "2026-08-15",
+    "jenis": "Pengeluaran",
+    "kategori": "Gaji",
+    "nominal": 2500000,
+    "keterangan": "Uang lembur & transport staff",
+    "nota": "VCH-0815"
+  },
+  {
+    "id": 6,
+    "cabang_id": 1,
+    "nama_cabang": "Cabang Utama",
+    "tanggal": "2026-08-20",
+    "jenis": "Pendapatan",
+    "kategori": "Pendapatan Lain",
+    "nominal": 500000,
+    "keterangan": "Hasil sewa rak display vendor",
+    "nota": "-"
+  },
+  {
+    "id": 7,
+    "cabang_id": 1,
+    "nama_cabang": "Cabang Utama",
+    "tanggal": "2026-08-25",
+    "jenis": "Pengeluaran",
+    "kategori": "Sewa",
+    "nominal": 1500000,
+    "keterangan": "Perpanjangan sewa stan bazar",
+    "nota": "BZR-0825"
+  },
+  {
+    "id": 8,
+    "cabang_id": 1,
+    "nama_cabang": "Toko Tigaraksa",
+    "tanggal": "2026-08-28",
+    "jenis": "Pendapatan",
+    "kategori": "Penjualan Langsung",
+    "nominal": 3200000.0,
+    "keterangan": "Pendapatan kasir shift pagi & sore",
+    "nota": "KASIR"
+  },
+  {
+    "id": 9,
+    "cabang_id": 2,
+    "nama_cabang": "Toko Balaraja",
+    "tanggal": "2026-08-28",
+    "jenis": "Pengeluaran",
+    "kategori": "Penjualan Grosir",
+    "nominal": 10000.0,
+    "keterangan": "-",
+    "nota": "-"
+  }
+]
