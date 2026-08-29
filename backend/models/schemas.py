@@ -1,4 +1,4 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, Field
 from datetime import date
 from decimal import Decimal
 from typing import Optional, Literal
@@ -95,3 +95,17 @@ class SisaBarangUpdate(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     new_password: str
+
+class PendapatanPengeluaranCreate(BaseModel):
+    cabang_id: int
+    tanggal: date
+    jenis: Literal["pendapatan", "pengeluaran"]
+    nama_pengeluaran: str = Field(..., min_length=1, max_length=150)
+    nominal: Decimal = Field(..., gt=0)
+
+
+class PendapatanPengeluaranUpdate(BaseModel):
+    tanggal: date
+    jenis: Literal["pendapatan", "pengeluaran"]
+    nama_pengeluaran: str = Field(..., min_length=1, max_length=150)
+    nominal: Decimal = Field(..., gt=0)

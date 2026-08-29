@@ -6,6 +6,7 @@ from database.connection import init_pool
 from api import (
     routes_auth, routes_cabang, routes_users, routes_folder,
     routes_invoice, routes_transaksi, routes_activity, routes_dashboard,
+    routes_pendapatan_pengeluaran,
 )
 
 app = FastAPI(title=APP_TITLE)
@@ -37,6 +38,6 @@ app.include_router(routes_invoice.router)
 app.include_router(routes_transaksi.router)
 app.include_router(routes_activity.router)
 app.include_router(routes_dashboard.router)
-
+app.include_router(routes_pendapatan_pengeluaran.router)
 
 # Jalankan lokal dengan: uvicorn main:app --reload --host 0.0.0.0 --port 8000
