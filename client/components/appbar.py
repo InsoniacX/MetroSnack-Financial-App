@@ -52,10 +52,22 @@ def nav_rail(page, selected_index, refresh_current_view):
     destinations = [
         ft.NavigationRailDestination(icon=ft.Icons.DASHBOARD_OUTLINED, selected_icon=ft.Icons.DASHBOARD, label="Dashboard"),
         ft.NavigationRailDestination(icon=ft.Icons.DESCRIPTION_OUTLINED, selected_icon=ft.Icons.DESCRIPTION, label="Invoice"),
-        # ft.NavigationRailDestination(icon=ft.Icons.SWAP_HORIZ_OUTLINED, selected_icon=ft.Icons.SWAP_HORIZ, label="Kas"),
+        ft.NavigationRailDestination(icon=ft.Icons.SWAP_HORIZ_OUTLINED, selected_icon=ft.Icons.SWAP_HORIZ, label="Kas"),
+        ft.NavigationRailDestination(icon=ft.Icons.LOCAL_SHIPPING_OUTLINED, selected_icon=ft.Icons.LOCAL_SHIPPING, label="Supir/Kenek"),
+        ft.NavigationRailDestination(icon=ft.Icons.FACTORY_OUTLINED, selected_icon=ft.Icons.FACTORY, label="Pabrik"),
+        ft.NavigationRailDestination(icon=ft.Icons.WAREHOUSE_OUTLINED, selected_icon=ft.Icons.WAREHOUSE, label="Balaraja"),
+        ft.NavigationRailDestination(icon=ft.Icons.ASSESSMENT_OUTLINED, selected_icon=ft.Icons.ASSESSMENT, label="Rekap"),
     ]
-    routes = ["/dashboard", "/invoices"]
-    # "/pendapatan-pengeluaran"
+    routes = [
+        "/dashboard",
+        "/invoices",
+        "/pendapatan-pengeluaran",
+        "/supir-kenek",
+        "/pengambilan-pabrik",
+        "/pengambilan-balaraja",
+        "/rekap-bulanan",
+    ]
+    # 
 
     if is_admin:
         destinations.append(

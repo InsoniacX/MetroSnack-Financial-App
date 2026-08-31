@@ -2,24 +2,13 @@
   {
     "id": 1,
     "cabang_id": 1,
-    "nama_cabang": "Cabang Utama",
+    "nama_cabang": "Toko Tigaraksa",
     "tanggal": "2026-08-01",
     "jenis": "Pendapatan",
     "kategori": "Penjualan Langsung",
-    "nominal": 4500000,
+    "nominal": 500000.0,
     "keterangan": "Penjualan snack harian toko",
     "nota": "NOTA-0801"
-  },
-  {
-    "id": 2,
-    "cabang_id": 1,
-    "nama_cabang": "Cabang Utama",
-    "tanggal": "2026-08-02",
-    "jenis": "Pengeluaran",
-    "kategori": "Bahan Baku",
-    "nominal": 1200000,
-    "keterangan": "Beli stok kemasan & bumbu",
-    "nota": "NOTA-0802"
   },
   {
     "id": 3,

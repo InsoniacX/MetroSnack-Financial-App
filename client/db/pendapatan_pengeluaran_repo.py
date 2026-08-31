@@ -44,7 +44,7 @@ def _save_raw_data(data):
         print(f"Error saving mock data: {ex}")
 
 
-def get_transaksi_kas(cabang_id=None, bulan=None, tahun=None, start_date=None, end_date=None, jenis=None, kategori=None, search=None):
+def get_transaksi_kas(cabang_id=None, bulan=None, tahun=None, start_date=None, end_date=None, jenis=None, kategori=None, search=None, sort_order="desc"):
     """Mengambil daftar transaksi kas dari JSON mockup dengan filter lengkap."""
     data = _load_raw_data()
     filtered = []
@@ -106,8 +106,9 @@ def get_transaksi_kas(cabang_id=None, bulan=None, tahun=None, start_date=None, e
             "nota": item.get("nota", ""),
         })
 
-    # Urutkan berdasarkan tanggal terbaru lalu ID terbesar
-    filtered.sort(key=lambda x: (x["tanggal"], x["id"]), reverse=True)
+    # Urutkan berdasarkan tanggal dan ID (asc / desc)
+    is_desc = (sort_order or "desc").lower() == "desc"
+    filtered.sort(key=lambda x: (x["tanggal"], x["id"]), reverse=is_desc)
     return filtered
 
 

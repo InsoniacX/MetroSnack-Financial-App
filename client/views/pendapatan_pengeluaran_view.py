@@ -5,6 +5,8 @@ from components.appbar import build_appbar
 from components.metric_card import metric_card
 from utils.formatting import rp
 from utils.validation import require_text, parse_date, parse_positive_decimal
+from utils.pdf_export import generate_pendapatan_pengeluaran_pdf
+from db.activity_repo import log_activity
 from db.pendapatan_pengeluaran_repo import (
     get_transaksi_kas,
     add_transaksi_kas,
@@ -28,6 +30,7 @@ def build_view(page: ft.Page):
         "end_date": None,
         "cabang_id": None if is_pusat else actor.get("cabang_id"),
         "search": "",
+        "sort_order": "desc",
     }
 
     cabang_list = []
@@ -43,16 +46,8 @@ def build_view(page: ft.Page):
             start_date=filter_state["start_date"],
             end_date=filter_state["end_date"],
             search=filter_state["search"],
+            sort_order=filter_state["sort_order"],
         )
-
-    def refresh_ui():
-        if page.views and len(page.views[-1].controls) > 0:
-            row_control = page.views[-1].controls[0]
-            if hasattr(row_control, "controls") and len(row_control.controls) >= 3:
-                row_control.controls[2].content = build_view(page)
-                page.update()
-                return
-        page.update()
 
     def close_dialog(e=None):
         page.pop_dialog()
@@ -113,7 +108,8 @@ def build_view(page: ft.Page):
                 sel_cid = actor.get("cabang_id", 1)
                 nama_cbg = actor.get("nama_cabang", "Cabang")
 
-            if form_id_target["id"] is None:
+            is_edit = form_id_target["id"] is not None
+            if not is_edit:
                 add_transaksi_kas(
                     cabang_id=sel_cid,
                     nama_cabang=nama_cbg,
@@ -124,7 +120,7 @@ def build_view(page: ft.Page):
                     keterangan=ket_val,
                     nota=nota_val,
                 )
-                page.show_dialog(ft.SnackBar(ft.Text("Transaksi berhasil ditambahkan!"), bgcolor=ft.Colors.GREEN_700))
+                success_msg = "Transaksi berhasil ditambahkan!"
             else:
                 update_transaksi_kas(
                     transaksi_id=form_id_target["id"],
@@ -137,10 +133,14 @@ def build_view(page: ft.Page):
                     cabang_id=sel_cid,
                     nama_cabang=nama_cbg,
                 )
-                page.show_dialog(ft.SnackBar(ft.Text("Transaksi berhasil diperbarui!"), bgcolor=ft.Colors.GREEN_700))
+                success_msg = "Transaksi berhasil diperbarui!"
 
+            # Tutup dialog terlebih dahulu
             close_dialog()
-            refresh_ui()
+            # Segarkan tabel & metrik
+            refresh_table_content()
+            # Tampilkan notifikasi snackbar
+            page.show_dialog(ft.SnackBar(ft.Text(success_msg), bgcolor=ft.Colors.GREEN_700))
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
         except Exception as ex:
@@ -205,9 +205,9 @@ def build_view(page: ft.Page):
             tid = delete_target["id"]
             if tid:
                 delete_transaksi_kas(tid)
-                page.show_dialog(ft.SnackBar(ft.Text("Transaksi berhasil dihapus!"), bgcolor=ft.Colors.GREEN_700))
                 close_dialog()
-                refresh_ui()
+                refresh_table_content()
+                page.show_dialog(ft.SnackBar(ft.Text("Transaksi berhasil dihapus!"), bgcolor=ft.Colors.GREEN_700))
         except Exception as ex:
             page.show_dialog(ft.SnackBar(ft.Text(f"Gagal menghapus transaksi: {ex}"), bgcolor=ft.Colors.RED_400))
 
@@ -243,6 +243,16 @@ def build_view(page: ft.Page):
         value="",
     )
 
+    filter_sort_dropdown = ft.Dropdown(
+        label="Urutan Tanggal",
+        width=190,
+        options=[
+            ft.dropdown.Option("desc", "Terbaru (Desc)"),
+            ft.dropdown.Option("asc", "Terlama (Asc)"),
+        ],
+        value=filter_state["sort_order"],
+    )
+
     filter_cabang_dropdown = ft.Dropdown(
         label="Cabang",
         width=200,
@@ -254,7 +264,7 @@ def build_view(page: ft.Page):
         label="Cari Transaksi",
         hint_text="Keterangan, nota, kategori...",
         prefix_icon=ft.Icons.SEARCH,
-        width=260,
+        width=240,
         value=filter_state["search"],
     )
 
@@ -269,6 +279,8 @@ def build_view(page: ft.Page):
         except Exception:
             filter_state["end_date"] = None
 
+        filter_state["sort_order"] = filter_sort_dropdown.value or "desc"
+
         if is_pusat:
             sel_cbg = filter_cabang_dropdown.value
             filter_state["cabang_id"] = None if sel_cbg == "Semua" else int(sel_cbg)
@@ -279,16 +291,19 @@ def build_view(page: ft.Page):
     def reset_filter(e=None):
         filter_start_field.value = ""
         filter_end_field.value = ""
+        filter_sort_dropdown.value = "desc"
         if is_pusat:
             filter_cabang_dropdown.value = "Semua"
         search_field.value = ""
         apply_filter()
 
     search_field.on_submit = apply_filter
+    filter_sort_dropdown.on_change = apply_filter
 
     filter_controls = [
         filter_start_field,
         filter_end_field,
+        filter_sort_dropdown,
     ]
     if is_pusat:
         filter_controls.append(filter_cabang_dropdown)
@@ -316,6 +331,11 @@ def build_view(page: ft.Page):
     # TABEL DAFTAR TRANSAKSI
     # ==========================
     table_container = ft.Container()
+
+    def on_sort_tanggal(col_idx, ascending):
+        filter_state["sort_order"] = "asc" if ascending else "desc"
+        filter_sort_dropdown.value = filter_state["sort_order"]
+        refresh_table_content()
 
     def build_table_rows(items):
         rows = []
@@ -450,7 +470,10 @@ def build_view(page: ft.Page):
             )
         else:
             columns = [
-                ft.DataColumn(ft.Text("Tanggal")),
+                ft.DataColumn(
+                    ft.Text("Tanggal"),
+                    on_sort=lambda e: on_sort_tanggal(0, e.ascending),
+                ),
             ]
             if is_pusat:
                 columns.append(ft.DataColumn(ft.Text("Cabang")))
@@ -464,6 +487,8 @@ def build_view(page: ft.Page):
             ])
 
             dt = ft.DataTable(
+                sort_column_index=0,
+                sort_ascending=(filter_state["sort_order"] == "asc"),
                 columns=columns,
                 rows=build_table_rows(items),
                 border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_200),
@@ -472,7 +497,78 @@ def build_view(page: ft.Page):
                 show_bottom_border=True,
             )
             table_container.content = ft.Row([dt], scroll=ft.ScrollMode.AUTO)
-        page.update()
+        if page.views:
+            page.update()
+
+    # Export PDF Picker & Handler
+    export_picker = ft.FilePicker()
+    if export_picker not in page.services:
+        page.services.append(export_picker)
+
+    async def export_pdf(e):
+        items = get_filtered_data()
+        if not items:
+            page.show_dialog(ft.SnackBar(ft.Text("Tidak ada data transaksi untuk diexport."), bgcolor=ft.Colors.RED_400))
+            return
+
+        cbg_name = "Semua Cabang"
+        if filter_state["cabang_id"]:
+            cbg_name = next((c[1] for c in cabang_list if c[0] == filter_state["cabang_id"]), f"Cabang {filter_state['cabang_id']}")
+        elif not is_pusat:
+            cbg_name = actor.get("nama_cabang", "Cabang")
+
+        periode_str = "Semua Periode"
+        if filter_state["start_date"] and filter_state["end_date"]:
+            periode_str = f"{filter_state['start_date'].strftime('%d-%m-%Y')} s/d {filter_state['end_date'].strftime('%d-%m-%Y')}"
+        elif filter_state["start_date"]:
+            periode_str = f"Mulai {filter_state['start_date'].strftime('%d-%m-%Y')}"
+        elif filter_state["end_date"]:
+            periode_str = f"Sampai {filter_state['end_date'].strftime('%d-%m-%Y')}"
+
+        filter_info = {
+            "periode": periode_str,
+            "cabang": cbg_name,
+            "extra": f"Total: {len(items)} Transaksi",
+        }
+
+        nama_file_default = f"Laporan_Kas_{today.strftime('%Y%m%d')}.pdf"
+        try:
+            if page.platform == ft.PagePlatform.ANDROID or page.platform == ft.PagePlatform.IOS:
+                pdf_bytes = generate_pendapatan_pengeluaran_pdf(items, filter_info, is_pusat=is_pusat, output_path=None)
+                save_path = await export_picker.save_file(
+                    dialog_title="Simpan Laporan Kas PDF",
+                    file_name=nama_file_default,
+                    file_type=ft.FilePickerFileType.CUSTOM,
+                    allowed_extensions=["pdf"],
+                    src_bytes=pdf_bytes,
+                )
+                if not save_path:
+                    return
+            else:
+                save_path = await export_picker.save_file(
+                    dialog_title="Simpan Laporan Kas PDF",
+                    file_name=nama_file_default,
+                    file_type=ft.FilePickerFileType.CUSTOM,
+                    allowed_extensions=["pdf"],
+                )
+                if not save_path:
+                    return
+                if not save_path.lower().endswith(".pdf"):
+                    save_path += ".pdf"
+                generate_pendapatan_pengeluaran_pdf(items, filter_info, is_pusat=is_pusat, output_path=save_path)
+
+            log_activity(
+                actor.get("id"),
+                actor.get("username", "user"),
+                "CREATE",
+                "export_pdf",
+                filter_state.get("cabang_id") or 0,
+                f"Export PDF Laporan Kas ({periode_str})",
+                filter_state.get("cabang_id"),
+            )
+            page.show_dialog(ft.SnackBar(ft.Text(f"PDF berhasil disimpan: {save_path}"), bgcolor=ft.Colors.GREEN_700))
+        except Exception as ex:
+            page.show_dialog(ft.SnackBar(ft.Text(f"Gagal export PDF: {ex}"), bgcolor=ft.Colors.RED_400))
 
     # Initial population
     refresh_table_content()
@@ -484,6 +580,11 @@ def build_view(page: ft.Page):
                 ft.Text("Pendapatan & Pengeluaran", size=22, weight=ft.FontWeight.W_600),
                 ft.Text("Kelola dan pantau seluruh transaksi kas masuk & keluar.", size=13, color=ft.Colors.GREY_500),
             ], expand=True),
+            ft.OutlinedButton(
+                "Export ke PDF",
+                icon=ft.Icons.PICTURE_AS_PDF,
+                on_click=export_pdf,
+            ),
             ft.ElevatedButton(
                 "Tambah Transaksi",
                 icon=ft.Icons.ADD,

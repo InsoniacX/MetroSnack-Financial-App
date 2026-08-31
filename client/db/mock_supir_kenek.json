@@ -1,0 +1,186 @@
+{
+  "personel": [
+    {
+      "id": 1,
+      "nama": "Budi Santoso",
+      "peran": "Supir",
+      "no_telp": "0812-3456-7890",
+      "armada": "B 9123 SCD (Grand Max)",
+      "cabang_id": 1,
+      "nama_cabang": "Cabang Utama",
+      "status": "Aktif"
+    },
+    {
+      "id": 2,
+      "nama": "Agus Pratama",
+      "peran": "Kenek",
+      "no_telp": "0857-1122-3344",
+      "armada": "B 9123 SCD (Grand Max)",
+      "cabang_id": 1,
+      "nama_cabang": "Cabang Utama",
+      "status": "Aktif"
+    },
+    {
+      "id": 3,
+      "nama": "Ujang Supriatna",
+      "peran": "Supir",
+      "no_telp": "0878-9988-7766",
+      "armada": "B 9481 TZX (Colt Diesel)",
+      "cabang_id": 2,
+      "nama_cabang": "Cabang Barat",
+      "status": "Aktif"
+    },
+    {
+      "id": 4,
+      "nama": "Dedi Kurniawan",
+      "peran": "Kenek",
+      "no_telp": "0813-5566-7788",
+      "armada": "B 9481 TZX (Colt Diesel)",
+      "cabang_id": 2,
+      "nama_cabang": "Cabang Barat",
+      "status": "Aktif"
+    },
+    {
+      "id": 5,
+      "nama": "Herman Wijaya",
+      "peran": "Supir & Kenek",
+      "no_telp": "0821-4433-2211",
+      "armada": "B 9802 KLO (Carry Pick-up)",
+      "cabang_id": 1,
+      "nama_cabang": "Cabang Utama",
+      "status": "Aktif"
+    }
+  ],
+  "pengeluaran": [
+    {
+      "id": 1,
+      "tanggal": "2026-08-01",
+      "personel_id": 1,
+      "nama_personel": "Budi Santoso",
+      "peran": "Supir",
+      "kategori_biaya": "Uang Jalan / Saku",
+      "nominal": 250000.0,
+      "keterangan": "Uang jalan pengantaran rute Tigaraksa - Cikupa",
+      "nota": "UJ-0801",
+      "cabang_id": 1,
+      "nama_cabang": "Cabang Utama"
+    },
+    {
+      "id": 2,
+      "tanggal": "2026-08-02",
+      "personel_id": 2,
+      "nama_personel": "Agus Pratama",
+      "peran": "Kenek",
+      "kategori_biaya": "Uang Jalan / Saku",
+      "nominal": 150000.0,
+      "keterangan": "Uang saku kenek rute Cikupa - Balaraja",
+      "nota": "UK-0802",
+      "cabang_id": 1,
+      "nama_cabang": "Cabang Utama"
+    },
+    {
+      "id": 3,
+      "tanggal": "2026-08-03",
+      "personel_id": 1,
+      "nama_personel": "Budi Santoso",
+      "peran": "Supir",
+      "kategori_biaya": "BBM / Bensin",
+      "nominal": 300000.0,
+      "keterangan": "Isi solar armada Grand Max B 9123 SCD",
+      "nota": "SPBU-0803",
+      "cabang_id": 1,
+      "nama_cabang": "Cabang Utama"
+    },
+    {
+      "id": 4,
+      "tanggal": "2026-08-05",
+      "personel_id": 2,
+      "nama_personel": "Agus Pratama",
+      "peran": "Kenek",
+      "kategori_biaya": "Bongkar Muat",
+      "nominal": 100000.0,
+      "keterangan": "Biaya bongkar muatan snack di Pasar Anyar",
+      "nota": "BM-0805",
+      "cabang_id": 1,
+      "nama_cabang": "Cabang Utama"
+    },
+    {
+      "id": 5,
+      "tanggal": "2026-08-08",
+      "personel_id": 3,
+      "nama_personel": "Ujang Supriatna",
+      "peran": "Supir",
+      "kategori_biaya": "Tol & Parkir",
+      "nominal": 125000.0,
+      "keterangan": "Tol Jakarta-Merak & parkir agen grosir",
+      "nota": "ETOL-0808",
+      "cabang_id": 2,
+      "nama_cabang": "Cabang Barat"
+    },
+    {
+      "id": 6,
+      "tanggal": "2026-08-10",
+      "personel_id": 4,
+      "nama_personel": "Dedi Kurniawan",
+      "peran": "Kenek",
+      "kategori_biaya": "Makan & Minum",
+      "nominal": 80000.0,
+      "keterangan": "Uang makan lembur muatan luar kota",
+      "nota": "MK-0810",
+      "cabang_id": 2,
+      "nama_cabang": "Cabang Barat"
+    },
+    {
+      "id": 7,
+      "tanggal": "2026-08-14",
+      "personel_id": 3,
+      "nama_personel": "Ujang Supriatna",
+      "peran": "Supir",
+      "kategori_biaya": "BBM / Bensin",
+      "nominal": 450000.0,
+      "keterangan": "Solar Colt Diesel B 9481 TZX rute Serang",
+      "nota": "SPBU-0814",
+      "cabang_id": 2,
+      "nama_cabang": "Cabang Barat"
+    },
+    {
+      "id": 8,
+      "tanggal": "2026-08-18",
+      "personel_id": 1,
+      "nama_personel": "Budi Santoso",
+      "peran": "Supir",
+      "kategori_biaya": "Lembur / Bonus Trip",
+      "nominal": 175000.0,
+      "keterangan": "Bonus trip pengiriman dadakan malam hari",
+      "nota": "BNS-0818",
+      "cabang_id": 1,
+      "nama_cabang": "Cabang Utama"
+    },
+    {
+      "id": 9,
+      "tanggal": "2026-08-22",
+      "personel_id": 5,
+      "nama_personel": "Herman Wijaya",
+      "peran": "Supir & Kenek",
+      "kategori_biaya": "Uang Jalan / Saku",
+      "nominal": 200000.0,
+      "keterangan": "Uang jalan distribusi toko retail",
+      "nota": "UJ-0822",
+      "cabang_id": 1,
+      "nama_cabang": "Cabang Utama"
+    },
+    {
+      "id": 10,
+      "tanggal": "2026-08-25",
+      "personel_id": 1,
+      "nama_personel": "Budi Santoso",
+      "peran": "Supir",
+      "kategori_biaya": "Perbaikan Darurat",
+      "nominal": 120000.0,
+      "keterangan": "Tambal ban dan ganti pentil di tol",
+      "nota": "NOT-PB-25",
+      "cabang_id": 1,
+      "nama_cabang": "Cabang Utama"
+    }
+  ]
+}
