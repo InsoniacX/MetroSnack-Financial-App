@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, Query
 from auth.dependencies import (
-    get_current_user, 
+    get_current_user,
     assert_cabang_access,
-    require_admin,
+    is_pusat_admin,
+    require_pusat_admin,
 )
 from repositories import folder_repo
 from services.finance_service import hitung_sisa_hutang
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 def dashboard_summary(cabang_id: int | None = None, user: dict = Depends(get_current_user)):
     if cabang_id is not None:
         assert_cabang_access(user, cabang_id)
-    elif user["role"] != "admin":
+    elif not is_pusat_admin(user):
         cabang_id = user["cabang_id"]
 
     raw = folder_repo.get_dashboard_summary_raw(cabang_id)
@@ -22,14 +23,18 @@ def dashboard_summary(cabang_id: int | None = None, user: dict = Depends(get_cur
 
 
 @router.get("/cabang-summary")
-def cabang_summary(user: dict = Depends(require_admin)):
+def cabang_summary(
+    user: dict = Depends(require_pusat_admin),
+):
     """Ringkasan sederhana per-cabang (total folder + laba_bersih), dipakai
     halaman 'Pilih Cabang' -- BUKAN Sisa Hutang, pakai /dashboard/cabang-breakdown untuk itu."""
     return folder_repo.get_cabang_summary()
 
 
 @router.get("/cabang-breakdown")
-def cabang_breakdown(user: dict = Depends(require_admin)):
+def cabang_breakdown(
+    user: dict = Depends(require_pusat_admin),
+):
     rows = folder_repo.get_cabang_breakdown()
     result = []
 
@@ -51,7 +56,7 @@ def monthly_trend(
 ):
     if cabang_id is not None:
         assert_cabang_access(user, cabang_id)
-    elif user["role"] != "admin":
+    elif not is_pusat_admin(user):
         cabang_id = user["cabang_id"]
 
     rows = folder_repo.get_monthly_trend_raw(cabang_id, limit_months)

@@ -54,17 +54,23 @@ def list_entries(
     tanggal_awal: date | None = None,
     tanggal_akhir: date | None = None,
     jenis: Literal["pendapatan", "pengeluaran"] | None = None,
+    limit: int = Query(default=200, ge=1, le=500),
     user: dict = Depends(get_current_user),
-): 
-    
+):
     if tanggal_awal and tanggal_akhir and tanggal_awal > tanggal_akhir:
         raise HTTPException(
             status_code=422,
             detail="tanggal_awal tidak boleh melewati tanggal_akhir",
         )
-    
+
     _assert_feature_access(user, cabang_id)
-    return repo.get_entries(cabang_id, tanggal_awal, tanggal_akhir, jenis)
+    return repo.get_entries(
+        cabang_id,
+        tanggal_awal,
+        tanggal_akhir,
+        jenis,
+        limit,
+    )
 
 
 @router.post("")

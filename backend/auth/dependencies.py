@@ -39,9 +39,16 @@ def get_current_user(
 
     row = fetch_one(
         """
-        SELECT id, username, role, cabang_id, aktif
-        FROM users
-        WHERE id = %s
+        SELECT
+            u.id,
+            u.username,
+            u.role,
+            u.cabang_id,
+            u.aktif,
+            c.aktif AS cabang_aktif
+        FROM users u
+        LEFT JOIN cabang c ON c.id = u.cabang_id
+        WHERE u.id = %s
         """,
         (user_id,),
     )
@@ -49,10 +56,12 @@ def get_current_user(
     if row is None:
         raise _credentials_error("User tidak ditemukan, silakan login kembali")
 
-    uid, username, role, cabang_id, aktif = row
+    uid, username, role, cabang_id, aktif, cabang_aktif = row
 
-    if not aktif:
-        raise _credentials_error("Akun tidak aktif, silakan login kembali")
+    if cabang_id is not None and cabang_aktif is not True:
+        raise _credentials_error(
+            "Cabang tidak aktif, hubungi admin pusat"
+        )
 
     # Role dan cabang selalu diambil dari database, bukan dari claim JWT lama.
     return {
@@ -63,8 +72,27 @@ def get_current_user(
     }
 
 
-def require_admin(user: dict = Depends(get_current_user)) -> dict:
+def is_pusat_admin(user: dict) -> bool:
+    return user["role"] == "admin" and user["cabang_id"] is None
+
+
+def require_admin(
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Boleh diakses admin pusat maupun admin cabang."""
     if user["role"] != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hanya admin yang boleh mengakses ini",
+        )
+    return user
+
+
+def require_pusat_admin(
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Khusus admin pusat yang tidak terikat ke cabang."""
+    if not is_pusat_admin(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Hanya admin pusat yang boleh mengakses ini",
@@ -73,9 +101,11 @@ def require_admin(user: dict = Depends(get_current_user)) -> dict:
 
 
 def assert_cabang_access(user: dict, cabang_id: int):
-    if user["role"] == "admin":
+    # Hanya admin pusat yang boleh melewati pembatasan cabang.
+    if is_pusat_admin(user):
         return
 
+    # Admin cabang dan karyawan hanya boleh mengakses cabangnya sendiri.
     if user["cabang_id"] != cabang_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

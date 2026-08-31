@@ -1,25 +1,37 @@
 from database.connection import fetch_all, fetch_one, execute
 
 
-def get_entries(cabang_id, tanggal_awal=None, tanggal_akhir=None, jenis=None):
-    """List entri, filter opsional rentang tanggal & jenis. Dipakai baik
-    untuk 1 hari (tanggal_awal == tanggal_akhir) maupun 1 bulan penuh."""
+def get_entries(
+    cabang_id,
+    tanggal_awal=None,
+    tanggal_akhir=None,
+    jenis=None,
+    limit=200,
+):
+    """Daftar entri dengan filter opsional dan batas jumlah hasil."""
     query = """
-        SELECT id, cabang_id, tanggal, jenis, nama_pengeluaran, nominal, user_id, created_at, updated_at
+        SELECT id, cabang_id, tanggal, jenis, nama_pengeluaran,
+            nominal, user_id, created_at, updated_at
         FROM pendapatan_pengeluaran_harian
         WHERE cabang_id = %s
     """
     params = [cabang_id]
+
     if tanggal_awal is not None:
         query += " AND tanggal >= %s"
         params.append(tanggal_awal)
+
     if tanggal_akhir is not None:
         query += " AND tanggal <= %s"
         params.append(tanggal_akhir)
+
     if jenis is not None:
         query += " AND jenis = %s"
         params.append(jenis)
-    query += " ORDER BY tanggal DESC, id DESC"
+
+    query += " ORDER BY tanggal DESC, id DESC LIMIT %s"
+    params.append(limit)
+
     return fetch_all(query, tuple(params))
 
 
