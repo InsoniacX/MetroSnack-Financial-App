@@ -1,9 +1,8 @@
-import json
-import os
 from decimal import Decimal
-from datetime import datetime, date
-
-MOCK_FILE = os.path.join(os.path.dirname(__file__), "mock_pendapatan_pengeluaran.json")
+from datetime import date, datetime
+from .http_client import api_get, api_post, api_put, api_delete, ApiError
+from ._convert import to_date, to_decimal
+from .cabang_repo import get_active_cabang, get_cabang_name
 
 DEFAULT_KATEGORI_PENDAPATAN = [
     "Penjualan Langsung",
@@ -26,143 +25,212 @@ DEFAULT_KATEGORI_PENGELUARAN = [
 ]
 
 
-def _load_raw_data():
-    if not os.path.exists(MOCK_FILE):
-        return []
+def _iso(value):
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _parse_item_name(nama_str):
+    """
+    Ekstrak kategori dan keterangan dari kolom nama_pengeluaran.
+    Format yang didukung:
+    - '[Kategori] Keterangan'
+    - 'Kategori - Keterangan'
+    - 'Keterangan' (default kategori: 'Lain-lain')
+    """
+    nama = str(nama_str or "").strip()
+    if not nama:
+        return "Lain-lain", ""
+    if nama.startswith("[") and "]" in nama:
+        parts = nama[1:].split("]", 1)
+        kat = parts[0].strip()
+        ket = parts[1].strip()
+        return kat or "Lain-lain", ket or kat
+    if " - " in nama:
+        parts = nama.split(" - ", 1)
+        kat = parts[0].strip()
+        ket = parts[1].strip()
+        return kat or "Lain-lain", ket or kat
+    return "Lain-lain", nama
+
+
+def _format_item_name(kategori, keterangan):
+    """Menggabungkan kategori dan keterangan menjadi format nama_pengeluaran backend."""
+    ket = (keterangan or "").strip()
+    kat = (kategori or "").strip()
+    if kat and kat not in ("Lain-lain", "") and (kat.lower() not in ket.lower()):
+        return f"[{kat}] {ket}" if ket else kat
+    return ket or kat or "Transaksi Kas"
+
+
+def get_transaksi_kas(
+    cabang_id=None,
+    bulan=None,
+    tahun=None,
+    start_date=None,
+    end_date=None,
+    jenis=None,
+    kategori=None,
+    search=None,
+    sort_order="desc",
+):
+    """
+    Mengambil daftar transaksi pendapatan/pengeluaran dari backend API.
+    Mendukung filter cabang_id, rentang tanggal, bulan/tahun, jenis, kategori, dan search keyword.
+    """
+    cabang_name_map = {}
     try:
-        with open(MOCK_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        active_cabangs = get_active_cabang()
+        cabang_name_map = {c[0]: c[1] for c in active_cabangs}
     except Exception:
-        return []
+        pass
 
+    raw_rows = []
+    if cabang_id is not None:
+        params = {"cabang_id": cabang_id, "limit": 500}
+        if start_date:
+            params["tanggal_awal"] = _iso(start_date)
+        if end_date:
+            params["tanggal_akhir"] = _iso(end_date)
+        if jenis and str(jenis).lower() in ("pendapatan", "pengeluaran"):
+            params["jenis"] = str(jenis).lower()
 
-def _save_raw_data(data):
-    try:
-        with open(MOCK_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-    except Exception as ex:
-        print(f"Error saving mock data: {ex}")
-
-
-def get_transaksi_kas(cabang_id=None, bulan=None, tahun=None, start_date=None, end_date=None, jenis=None, kategori=None, search=None, sort_order="desc"):
-    """Mengambil daftar transaksi kas dari JSON mockup dengan filter lengkap."""
-    data = _load_raw_data()
-    filtered = []
-
-    for item in data:
-        tgl_str = item.get("tanggal", "")
         try:
-            tgl_dt = datetime.strptime(tgl_str, "%Y-%m-%d").date()
-        except Exception:
-            tgl_dt = None
+            resp = api_get("/pendapatan-pengeluaran", params=params)
+            if resp:
+                raw_rows.extend(resp)
+        except ApiError as e:
+            # Jika cabang ini belum diaktifkan fiturnya (403), teruskan error
+            raise e
+    else:
+        # Jika cabang_id None (misal akun Pusat melihat semua cabang), query per cabang
+        if not cabang_name_map:
+            return []
+        for cid in cabang_name_map.keys():
+            params = {"cabang_id": cid, "limit": 500}
+            if start_date:
+                params["tanggal_awal"] = _iso(start_date)
+            if end_date:
+                params["tanggal_akhir"] = _iso(end_date)
+            if jenis and str(jenis).lower() in ("pendapatan", "pengeluaran"):
+                params["jenis"] = str(jenis).lower()
+            try:
+                resp = api_get("/pendapatan-pengeluaran", params=params)
+                if resp:
+                    raw_rows.extend(resp)
+            except ApiError:
+                # Abaikan cabang yang belum punya akses / 403 saat multi-cabang query
+                continue
 
-        # Filter Cabang (jika bukan pusat atau jika filter cabang dipilih)
-        if cabang_id is not None and item.get("cabang_id") != cabang_id:
+    items = []
+    for r in raw_rows:
+        # Structure: [id, cabang_id, tanggal, jenis, nama_pengeluaran, nominal, user_id, created_at, updated_at]
+        eid, cid, tgl, jns, nama_pengeluaran, nom, *rest = r
+        tgl_dt = to_date(tgl)
+
+        # Filter Bulan & Tahun jika diberikan
+        if bulan is not None and tgl_dt and tgl_dt.month != bulan:
+            continue
+        if tahun is not None and tgl_dt and tgl_dt.year != tahun:
             continue
 
-        # Filter Jenis (Pendapatan / Pengeluaran)
-        if jenis and jenis != "Semua" and item.get("jenis") != jenis:
+        kat_extracted, ket_extracted = _parse_item_name(nama_pengeluaran)
+
+        # Filter Kategori jika diberikan
+        if kategori and kategori != "Semua" and kat_extracted.lower() != kategori.lower():
             continue
 
-        # Filter Kategori
-        if kategori and kategori != "Semua" and item.get("kategori") != kategori:
-            continue
+        cbg_nama = cabang_name_map.get(cid) or f"Cabang {cid}"
 
-        # Filter Periode: Bulan & Tahun
-        if bulan is not None and tgl_dt:
-            if tgl_dt.month != bulan:
-                continue
-        if tahun is not None and tgl_dt:
-            if tgl_dt.year != tahun:
-                continue
-
-        # Filter Periode: Rentang Tanggal (start_date s/d end_date)
-        if start_date and tgl_dt:
-            if tgl_dt < start_date:
-                continue
-        if end_date and tgl_dt:
-            if tgl_dt > end_date:
-                continue
-
-        # Filter Search text
+        # Filter Search keyword
         if search:
             s = search.lower().strip()
-            ket = str(item.get("keterangan", "")).lower()
-            nota = str(item.get("nota", "")).lower()
-            kat = str(item.get("kategori", "")).lower()
-            cbg = str(item.get("nama_cabang", "")).lower()
-            if s not in ket and s not in nota and s not in kat and s not in cbg:
+            nama_full = str(nama_pengeluaran or "").lower()
+            cbg_str = cbg_nama.lower()
+            if s not in nama_full and s not in cbg_str and s not in kat_extracted.lower() and s not in ket_extracted.lower():
                 continue
 
-        filtered.append({
-            "id": item.get("id"),
-            "cabang_id": item.get("cabang_id"),
-            "nama_cabang": item.get("nama_cabang", "Cabang"),
-            "tanggal": tgl_dt if tgl_dt else date.today(),
-            "jenis": item.get("jenis", "Pendapatan"),
-            "kategori": item.get("kategori", "Lain-lain"),
-            "nominal": Decimal(str(item.get("nominal", 0))),
-            "keterangan": item.get("keterangan", ""),
-            "nota": item.get("nota", ""),
+        items.append({
+            "id": eid,
+            "cabang_id": cid,
+            "nama_cabang": cbg_nama,
+            "tanggal": tgl_dt or date.today(),
+            "jenis": "Pendapatan" if str(jns).lower() == "pendapatan" else "Pengeluaran",
+            "kategori": kat_extracted,
+            "nominal": to_decimal(nom),
+            "keterangan": ket_extracted or nama_pengeluaran or "-",
+            "nota": "",
         })
 
-    # Urutkan berdasarkan tanggal dan ID (asc / desc)
     is_desc = (sort_order or "desc").lower() == "desc"
-    filtered.sort(key=lambda x: (x["tanggal"], x["id"]), reverse=is_desc)
-    return filtered
+    items.sort(key=lambda x: (x["tanggal"], x["id"]), reverse=is_desc)
+    return items
 
 
 def add_transaksi_kas(cabang_id, nama_cabang, tanggal, jenis, kategori, nominal, keterangan, nota=""):
-    """Menambahkan transaksi baru ke data mockup JSON."""
-    data = _load_raw_data()
-    next_id = max([item.get("id", 0) for item in data], default=0) + 1
-
-    tgl_str = tanggal.isoformat() if hasattr(tanggal, "isoformat") else str(tanggal)
-    new_item = {
-        "id": next_id,
-        "cabang_id": cabang_id,
-        "nama_cabang": nama_cabang or "Cabang",
-        "tanggal": tgl_str,
-        "jenis": jenis,
-        "kategori": kategori,
-        "nominal": float(nominal),
-        "keterangan": keterangan or "",
-        "nota": (nota or "").strip(),
+    """
+    Menambahkan transaksi pendapatan/pengeluaran baru ke backend API (POST /pendapatan-pengeluaran).
+    """
+    nama_item = _format_item_name(kategori, keterangan)
+    body = {
+        "cabang_id": int(cabang_id),
+        "tanggal": _iso(tanggal),
+        "jenis": "pendapatan" if str(jenis).lower() == "pendapatan" else "pengeluaran",
+        "nama_pengeluaran": nama_item[:150],
+        "nominal": str(nominal),
     }
-    data.append(new_item)
-    _save_raw_data(data)
-    return next_id
+    resp = api_post("/pendapatan-pengeluaran", body)
+    return resp.get("id") if resp else None
 
 
 def update_transaksi_kas(transaksi_id, tanggal, jenis, kategori, nominal, keterangan, nota="", cabang_id=None, nama_cabang=None):
-    """Memperbarui transaksi yang ada di data mockup JSON."""
-    data = _load_raw_data()
-    tgl_str = tanggal.isoformat() if hasattr(tanggal, "isoformat") else str(tanggal)
-
-    updated = False
-    for item in data:
-        if item.get("id") == transaksi_id:
-            item["tanggal"] = tgl_str
-            item["jenis"] = jenis
-            item["kategori"] = kategori
-            item["nominal"] = float(nominal)
-            item["keterangan"] = keterangan or ""
-            item["nota"] = (nota or "").strip()
-            if cabang_id is not None:
-                item["cabang_id"] = cabang_id
-            if nama_cabang:
-                item["nama_cabang"] = nama_cabang
-            updated = True
-            break
-
-    if updated:
-        _save_raw_data(data)
-    return updated
+    """
+    Memperbarui transaksi pendapatan/pengeluaran di backend API (PUT /pendapatan-pengeluaran/{id}).
+    """
+    nama_item = _format_item_name(kategori, keterangan)
+    body = {
+        "tanggal": _iso(tanggal),
+        "jenis": "pendapatan" if str(jenis).lower() == "pendapatan" else "pengeluaran",
+        "nama_pengeluaran": nama_item[:150],
+        "nominal": str(nominal),
+    }
+    api_put(f"/pendapatan-pengeluaran/{transaksi_id}", body)
+    return True
 
 
 def delete_transaksi_kas(transaksi_id):
-    """Menghapus transaksi dari data mockup JSON."""
-    data = _load_raw_data()
-    data = [item for item in data if item.get("id") != transaksi_id]
-    _save_raw_data(data)
+    """
+    Menghapus transaksi pendapatan/pengeluaran dari backend API (DELETE /pendapatan-pengeluaran/{id}).
+    """
+    api_delete(f"/pendapatan-pengeluaran/{transaksi_id}")
     return True
+
+
+def get_daily_summary(cabang_id, tanggal):
+    """
+    Mengambil summary harian kas dari backend API (GET /pendapatan-pengeluaran/summary/harian).
+    """
+    return api_get(
+        "/pendapatan-pengeluaran/summary/harian",
+        params={"cabang_id": cabang_id, "tanggal": _iso(tanggal)},
+    )
+
+
+def get_monthly_summary(cabang_id, bulan, tahun):
+    """
+    Mengambil summary bulanan kas dari backend API (GET /pendapatan-pengeluaran/summary/bulanan).
+    """
+    return api_get(
+        "/pendapatan-pengeluaran/summary/bulanan",
+        params={"cabang_id": cabang_id, "bulan": bulan, "tahun": tahun},
+    )
+
+
+# Alias untuk keseragaman penamaan dengan backend
+get_entries = get_transaksi_kas
+create_entry = add_transaksi_kas
+update_entry = update_transaksi_kas
+delete_entry = delete_transaksi_kas

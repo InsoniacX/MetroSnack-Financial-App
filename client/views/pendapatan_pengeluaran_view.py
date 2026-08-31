@@ -410,7 +410,12 @@ def build_view(page: ft.Page):
     metric_count_card = ft.Container(col={"xs": 12, "sm": 6, "md": 3})
 
     def refresh_table_content():
-        items = get_filtered_data()
+        err_msg = None
+        try:
+            items = get_filtered_data()
+        except Exception as ex:
+            items = []
+            err_msg = str(ex)
 
         pendapatan_sum = sum([it["nominal"] for it in items if it["jenis"] == "Pendapatan"])
         pengeluaran_sum = sum([it["nominal"] for it in items if it["jenis"] == "Pengeluaran"])
@@ -454,7 +459,21 @@ def build_view(page: ft.Page):
             dark_text_color=ft.Colors.WHITE,
         )
 
-        if not items:
+        if err_msg:
+            table_container.content = ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, size=48, color=ft.Colors.ORANGE_400),
+                    ft.Container(height=8),
+                    ft.Text("Tidak dapat memuat data transaksi", size=15, weight=ft.FontWeight.W_500),
+                    ft.Text(err_msg, size=12, color=ft.Colors.GREY_500, text_align=ft.TextAlign.CENTER),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.Alignment.CENTER,
+                padding=40,
+                border_radius=10,
+                border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_300),
+                bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE,
+            )
+        elif not items:
             table_container.content = ft.Container(
                 content=ft.Column([
                     ft.Icon(ft.Icons.RECEIPT_LONG_OUTLINED, size=48, color=ft.Colors.GREY_400),
