@@ -37,9 +37,15 @@ def update_user(user_id, nama_lengkap, role):
     execute("UPDATE users SET nama_lengkap=%s, role=%s WHERE id=%s", (nama_lengkap, role, user_id))
 
 
-def get_user_cabang(user_id):
-    row = fetch_one("SELECT cabang_id FROM users WHERE id=%s", (user_id,))
-    return row[0] if row else None
+def get_user_header(user_id):
+    return fetch_one(
+        """
+        SELECT id, username, role, cabang_id, aktif
+        FROM users
+        WHERE id = %s
+        """,
+        (user_id,),
+    )
 
 
 def reset_password(user_id, new_password):

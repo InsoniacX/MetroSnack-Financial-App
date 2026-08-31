@@ -12,40 +12,100 @@ username/password OAuth2 standar yang tidak cocok dengan endpoint
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from auth.security import decode_access_token
+from database.connection import fetch_one
 
 bearer_scheme = HTTPBearer()
 
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict:
+def _credentials_error(detail: str = "Token tidak valid atau kadaluarsa"):
+    return HTTPException(
+        status_code = status.HTTP_401_UNAUTHORIZED,
+        detail = detail,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> dict:
     payload = decode_access_token(credentials.credentials)
+
     if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token tidak valid atau kedaluwarsa",
-            headers={"WWW-Authenticate": "Bearer"},
+        raise _credentials_error()
+
+    try:
+        user_id = int(payload.get("sub"))
+    except (TypeError, ValueError):
+        raise _credentials_error()
+
+    row = fetch_one(
+        """
+        SELECT
+            u.id,
+            u.username,
+            u.role,
+            u.cabang_id,
+            u.aktif,
+            c.aktif AS cabang_aktif
+        FROM users u
+        LEFT JOIN cabang c ON c.id = u.cabang_id
+        WHERE u.id = %s
+        """,
+        (user_id,),
+    )
+
+    if row is None:
+        raise _credentials_error("User tidak ditemukan, silakan login kembali")
+
+    uid, username, role, cabang_id, aktif, cabang_aktif = row
+
+    if cabang_id is not None and cabang_aktif is not True:
+        raise _credentials_error(
+            "Cabang tidak aktif, hubungi admin pusat"
         )
+
+    # Role dan cabang selalu diambil dari database, bukan dari claim JWT lama.
     return {
-        "id": int(payload["sub"]),
-        "username": payload.get("username"),
-        "role": payload.get("role"),
-        "cabang_id": payload.get("cabang_id"),
+        "id": uid,
+        "username": username,
+        "role": role,
+        "cabang_id": cabang_id,
     }
 
 
-def require_admin(user: dict = Depends(get_current_user)) -> dict:
+def is_pusat_admin(user: dict) -> bool:
+    return user["role"] == "admin" and user["cabang_id"] is None
+
+
+def require_admin(
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Boleh diakses admin pusat maupun admin cabang."""
     if user["role"] != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Hanya admin pusat yang boleh mengakses ini")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hanya admin yang boleh mengakses ini",
+        )
+    return user
+
+
+def require_pusat_admin(
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Khusus admin pusat yang tidak terikat ke cabang."""
+    if not is_pusat_admin(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hanya admin pusat yang boleh mengakses ini",
+        )
     return user
 
 
 def assert_cabang_access(user: dict, cabang_id: int):
-    """
-    Panggil ini di setiap endpoint yang menerima cabang_id dari
-    client (path/query param). admin pusat boleh akses semua cabang;
-    user cabang HANYA boleh akses cabang_id miliknya sendiri.
-    """
-    if user["role"] == "admin":
+    # Hanya admin pusat yang boleh melewati pembatasan cabang.
+    if is_pusat_admin(user):
         return
+
+    # Admin cabang dan karyawan hanya boleh mengakses cabangnya sendiri.
     if user["cabang_id"] != cabang_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

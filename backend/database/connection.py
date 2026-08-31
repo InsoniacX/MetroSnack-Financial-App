@@ -25,6 +25,14 @@ def get_pool():
     return _pool
 
 
+def close_pool():
+    """Tutup seluruh koneksi database saat aplikasi berhenti."""
+    global _pool
+    if _pool is not None:
+        _pool.closeall()
+        _pool = None
+        
+
 def execute(query, params=None, returning=False):
     conn = get_pool().getconn()
     try:

@@ -7,25 +7,48 @@ MONTH = {
 
 
 def get_dashboard_summary_raw(cabang_id=None):
-    """Angka mentah saja (modal, masuk_uang, masuk_barang). Perhitungan
-    Lebih/Kurang/Sisa Hutang dilakukan di services/finance_service.py,
-    BUKAN di sini, supaya tetap satu sumber kebenaran formula."""
-    if cabang_id is None:
-        row = fetch_one("""
-            SELECT COALESCE(SUM(i.invoice_bon), 0), COALESCE(SUM(t.masuk_uang), 0), COALESCE(SUM(t.masuk_barang), 0)
+    """Mengagregasikan transaksi per invoice terlebih dahulu agar
+    invoice_bon tidak terhitung berulang untuk setiap transaksi."""
+
+    where_clause = ""
+    params = ()
+
+    if cabang_id is not None:
+        where_clause = "WHERE cabang_id = %s"
+        params = (cabang_id,)
+
+    row = fetch_one(f"""
+        WITH per_invoice AS (
+            SELECT
+                i.id,
+                f.cabang_id,
+                i.invoice_bon AS modal_pusat,
+                COALESCE(SUM(t.masuk_uang), 0) AS masuk_uang,
+                COALESCE(SUM(t.masuk_barang), 0) AS masuk_barang
             FROM invoice i
-            LEFT JOIN transaksi_harian t ON t.invoice_id = i.id
-        """)
-    else:
-        row = fetch_one("""
-            SELECT COALESCE(SUM(i.invoice_bon), 0), COALESCE(SUM(t.masuk_uang), 0), COALESCE(SUM(t.masuk_barang), 0)
-            FROM invoice i
-            JOIN folder_bulan f ON f.id = i.folder_bulan_id
-            LEFT JOIN transaksi_harian t ON t.invoice_id = i.id
-            WHERE f.cabang_id = %s
-        """, (cabang_id,))
+            JOIN folder_bulan f
+                ON f.id = i.folder_bulan_id
+            LEFT JOIN transaksi_harian t
+                ON t.invoice_id = i.id
+            GROUP BY
+                i.id,
+                f.cabang_id,
+                i.invoice_bon
+        )
+        SELECT
+            COALESCE(SUM(modal_pusat), 0),
+            COALESCE(SUM(masuk_uang), 0),
+            COALESCE(SUM(masuk_barang), 0)
+        FROM per_invoice
+        {where_clause}
+    """, params)
+
     modal, omzet, barang = row
-    return {"modal_pusat": modal, "masuk_uang": omzet, "masuk_barang": barang}
+    return {
+        "modal_pusat": modal,
+        "masuk_uang": omzet,
+        "masuk_barang": barang,
+    }
 
 
 def get_cabang_breakdown():
