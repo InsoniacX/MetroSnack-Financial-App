@@ -15,6 +15,9 @@ from api import (
     routes_activity,
     routes_dashboard,
     routes_pendapatan_pengeluaran,
+    routes_supir_kenek,
+    routes_pengambilan_kas,
+    routes_operasional_mobil,
 )
 
 
@@ -55,6 +58,9 @@ app.include_router(routes_invoice.router)
 app.include_router(routes_transaksi.router)
 app.include_router(routes_activity.router)
 app.include_router(routes_dashboard.router)
+app.include_router(routes_supir_kenek.router)
+app.include_router(routes_operasional_mobil.router)
+app.include_router(routes_pengambilan_kas.router)
 app.include_router(routes_pendapatan_pengeluaran.router)
 
 # Jalankan lokal dengan:
