@@ -111,4 +111,36 @@ def seeded_ids(client):
             "SELECT id FROM invoice WHERE no_laporan = %s",
             ("TEST-B-001",),
         ),
+        "supir_zebor": get_id(
+            """
+            SELECT id
+            FROM supir_kenek
+            WHERE nama = %s
+            """,
+            ("Supir Test",),
+        ),
+        "operasional_zebor": get_id(
+            """
+            SELECT id
+            FROM operasional_mobil
+            WHERE keterangan = %s
+            """,
+            ("Trip operasional test",),
+        ),
+        "pengambilan_pabrik_zebor": get_id(
+            """
+            SELECT id
+            FROM pengambilan_pabrik
+            WHERE keterangan = %s
+            """,
+            ("BAYAR TERIGU TEST",),
+        ),
+        "pengambilan_balaraja_zebor": get_id(
+            """
+            SELECT id
+            FROM pengambilan_balaraja
+            WHERE keterangan = %s
+            """,
+            ("SAGU TEST",),
+        ),
     }

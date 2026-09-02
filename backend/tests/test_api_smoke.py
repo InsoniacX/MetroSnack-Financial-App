@@ -899,3 +899,66 @@ def test_daftar_folder_tidak_menggandakan_modal(
     assert money(januari[6]) == Decimal("1000000")
     assert money(januari[7]) == Decimal("1500000")
     assert money(januari[8]) == Decimal("500000")
+
+
+def test_mutasi_operasional_mobil_lintas_cabang_ditolak(
+    client,
+    cabang_b_headers,
+    seeded_ids,
+):
+    update_response = client.put(
+        f"/operasional-mobil/{seeded_ids['operasional_zebor']}",
+        headers=cabang_b_headers,
+        json={
+            "tanggal": "2099-01-12",
+            "supir_id": seeded_ids["supir_zebor"],
+            "kenek_id": None,
+            "uang_jalan": "200000",
+            "keterangan": "Percobaan lintas cabang",
+        },
+    )
+
+    assert update_response.status_code == 403
+
+    delete_response = client.delete(
+        f"/operasional-mobil/{seeded_ids['operasional_zebor']}",
+        headers=cabang_b_headers,
+    )
+
+    assert delete_response.status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("sumber", "seed_key"),
+    [
+        ("pabrik", "pengambilan_pabrik_zebor"),
+        ("balaraja", "pengambilan_balaraja_zebor"),
+    ],
+)
+def test_mutasi_pengambilan_kas_lintas_cabang_ditolak(
+    client,
+    cabang_b_headers,
+    seeded_ids,
+    sumber,
+    seed_key,
+):
+    entry_id = seeded_ids[seed_key]
+
+    update_response = client.put(
+        f"/pengambilan-kas/{sumber}/{entry_id}",
+        headers=cabang_b_headers,
+        json={
+            "tanggal": "2099-01-15",
+            "keterangan": "Percobaan lintas cabang",
+            "nominal": "500000",
+        },
+    )
+
+    assert update_response.status_code == 403
+
+    delete_response = client.delete(
+        f"/pengambilan-kas/{sumber}/{entry_id}",
+        headers=cabang_b_headers,
+    )
+
+    assert delete_response.status_code == 403
