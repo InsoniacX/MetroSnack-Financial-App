@@ -89,38 +89,13 @@ def build_view(page: ft.Page):
         value=str(filter_state["tahun"]),
     )
 
-    filter_cabang_dropdown = ft.Dropdown(
-        label="Cabang",
-        width=200,
-        options=[ft.dropdown.Option("Semua", "Semua Cabang")] + [ft.dropdown.Option(str(c[0]), c[1]) for c in cabang_list],
-        value="Semua" if filter_state["cabang_id"] is None else str(filter_state["cabang_id"]),
-    )
-
     def apply_filter(e=None):
-        if is_pusat and e and e.control == filter_cabang_dropdown:
-            sel_cbg = filter_cabang_dropdown.value
-            filter_state["cabang_id"] = None if sel_cbg == "Semua" else int(sel_cbg)
-            cbg_years = get_rekap_available_years(filter_state["cabang_id"])
-            filter_tahun_dropdown.options = [ft.dropdown.Option(str(y), str(y)) for y in cbg_years]
-            if filter_tahun_dropdown.value not in [str(y) for y in cbg_years]:
-                filter_tahun_dropdown.value = str(cbg_years[0])
-            try:
-                filter_tahun_dropdown.update()
-            except Exception:
-                pass
-
         filter_state["bulan"] = int(filter_bulan_dropdown.value or today.month)
         filter_state["tahun"] = int(filter_tahun_dropdown.value or today.year)
-        if is_pusat:
-            sel_cbg = filter_cabang_dropdown.value
-            filter_state["cabang_id"] = None if sel_cbg == "Semua" else int(sel_cbg)
         refresh_rekap()
-
 
     filter_bulan_dropdown.on_change = apply_filter
     filter_tahun_dropdown.on_change = apply_filter
-    if is_pusat:
-        filter_cabang_dropdown.on_change = apply_filter
 
     filter_card = ft.Container(
         content=ft.Row([
@@ -128,7 +103,6 @@ def build_view(page: ft.Page):
             ft.Text("Periode Rekap Bulanan:", weight=ft.FontWeight.W_500, size=15),
             filter_bulan_dropdown,
             filter_tahun_dropdown,
-            filter_cabang_dropdown if is_pusat else ft.Container(),
             ft.ElevatedButton("Segarkan", icon=ft.Icons.REFRESH, on_click=apply_filter, bgcolor=ft.Colors.INDIGO_700, color=ft.Colors.WHITE),
         ], wrap=True, spacing=12, alignment=ft.MainAxisAlignment.START),
         bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE,
@@ -136,6 +110,7 @@ def build_view(page: ft.Page):
         border_radius=10,
         padding=16,
     )
+
 
     # Top Metric Cards
     metric_kenek_card = ft.Container(col={"xs": 12, "sm": 6, "md": 3})

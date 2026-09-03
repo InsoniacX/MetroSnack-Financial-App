@@ -253,13 +253,6 @@ def build_view(page: ft.Page):
         value=filter_state["sort_order"],
     )
 
-    filter_cabang_dropdown = ft.Dropdown(
-        label="Cabang",
-        width=200,
-        options=[ft.dropdown.Option("Semua", "Semua Cabang")] + [ft.dropdown.Option(str(c[0]), c[1]) for c in cabang_list],
-        value="Semua" if filter_state["cabang_id"] is None else str(filter_state["cabang_id"]),
-    )
-
     search_field = ft.TextField(
         label="Cari Transaksi",
         hint_text="Keterangan, nota, kategori...",
@@ -280,11 +273,6 @@ def build_view(page: ft.Page):
             filter_state["end_date"] = None
 
         filter_state["sort_order"] = filter_sort_dropdown.value or "desc"
-
-        if is_pusat:
-            sel_cbg = filter_cabang_dropdown.value
-            filter_state["cabang_id"] = None if sel_cbg == "Semua" else int(sel_cbg)
-
         filter_state["search"] = search_field.value or ""
         refresh_table_content()
 
@@ -292,8 +280,6 @@ def build_view(page: ft.Page):
         filter_start_field.value = ""
         filter_end_field.value = ""
         filter_sort_dropdown.value = "desc"
-        if is_pusat:
-            filter_cabang_dropdown.value = "Semua"
         search_field.value = ""
         apply_filter()
 
@@ -304,10 +290,9 @@ def build_view(page: ft.Page):
         filter_start_field,
         filter_end_field,
         filter_sort_dropdown,
+        search_field,
     ]
-    if is_pusat:
-        filter_controls.append(filter_cabang_dropdown)
-    filter_controls.append(search_field)
+
 
     filter_card = ft.Container(
         content=ft.Column([
