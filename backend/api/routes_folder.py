@@ -1,6 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from psycopg2 import errors as pg_errors
-from auth.dependencies import get_current_user, assert_cabang_access
+from auth.dependencies import (
+    get_current_user,
+    assert_cabang_access,
+    is_pusat_admin,
+)
 from models.schemas import FolderCreate
 from repositories import folder_repo, invoice_repo
 from repositories.activity_repo import log_activity
@@ -12,7 +16,7 @@ router = APIRouter(prefix="/folders", tags=["folders"])
 def list_folders(cabang_id: int | None = None, user: dict = Depends(get_current_user)):
     if cabang_id is not None:
         assert_cabang_access(user, cabang_id)
-    elif user["role"] != "admin":
+    elif not is_pusat_admin(user):
         cabang_id = user["cabang_id"]
     return folder_repo.get_folders(cabang_id)
 

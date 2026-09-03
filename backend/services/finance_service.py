@@ -40,7 +40,13 @@ def hitung_sisa_hutang(modal_pusat: Decimal, masuk_uang: Decimal, masuk_barang: 
     suatu saat perlu diaudit ulang.
     """
     lk = hitung_lebih_kurang(masuk_uang, masuk_barang)
-    sisa_hutang = Decimal(modal_pusat) - lk["lebih_uang"] + lk["kurang_uang"]
+    sisa_hutang_raw = (
+        Decimal(modal_pusat)
+        - lk["lebih_uang"]
+        + lk["kurang_uang"]
+    )
+    
+    sisa_hutang = max(sisa_hutang_raw, Decimal("0"))
     return {
         "modal_pusat": Decimal(modal_pusat),
         "masuk_uang": Decimal(masuk_uang),

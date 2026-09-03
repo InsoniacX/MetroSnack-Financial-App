@@ -12,4 +12,7 @@ __pycache__/
 */__pycache__
 
 # Product
-installer.iss
+*.iss
+Output/
+
+.prettierrc

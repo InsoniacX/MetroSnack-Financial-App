@@ -6,6 +6,7 @@ from db.folder_repo import get_invoice_ids
 from views import (
     folder_cabang_view, login_view, dashboard_view, invoices_view, folder_detail_view,
     invoice_detail_view, users_view, activity_log_view, cabang_view, pendapatan_pengeluaran_view,
+    supir_kenek_view, pengambilan_pabrik_view, pengambilan_balaraja_view, rekap_bulanan_view,
 )
 
 
@@ -45,7 +46,15 @@ def main(page: ft.Page):
         is_admin = app_state.user and app_state.user.get("role") == "admin"
         is_pusat = app_state.user and app_state.user.get("cabang_id") is None
 
-        routes = ["/dashboard", "/invoices", "/pendapatan-pengeluaran"]
+        routes = [
+            "/dashboard",
+            "/invoices",
+            "/pendapatan-pengeluaran",
+            "/supir-kenek",
+            "/pengambilan-pabrik",
+            "/pengambilan-balaraja",
+            "/rekap-bulanan",
+        ]
         if is_admin:
             routes.extend(["/users", "/activity-log"])
         if is_pusat:
@@ -57,6 +66,14 @@ def main(page: ft.Page):
             target = "/invoices"
         elif route.startswith("/pendapatan-pengeluaran"):
             target = "/pendapatan-pengeluaran"
+        elif route.startswith("/supir-kenek"):
+            target = "/supir-kenek"
+        elif route.startswith("/pengambilan-pabrik"):
+            target = "/pengambilan-pabrik"
+        elif route.startswith("/pengambilan-balaraja"):
+            target = "/pengambilan-balaraja"
+        elif route.startswith("/rekap-bulanan"):
+            target = "/rekap-bulanan"
         elif route == "/users":
             target = "/users"
         elif route == "/activity-log":
@@ -69,7 +86,7 @@ def main(page: ft.Page):
         return routes.index(target) if target in routes else 0
 
     def create_view(route, title, body):
-        appbar = build_appbar(page, title)
+        appbar = build_appbar(page, title, refresh_current_view)
 
         navrail = nav_rail(
             page,
@@ -98,15 +115,16 @@ def main(page: ft.Page):
         )
 
     def route_change(route):
-        page.views.clear()
         r = page.route
 
         if not app_state.is_logged_in() and r != "/login":
+            page.views.clear()
             page.views.append(login_view.build_view(page))
             page.update()
             return
 
         if r == "/login":
+            page.views.clear()
             page.views.append(login_view.build_view(page))
             page.update()
             return
@@ -117,21 +135,16 @@ def main(page: ft.Page):
 
         elif r == "/dashboard":
             body = dashboard_view.build_view(page)
-            page.views.append(create_view("/dashboard", "Dashboard", body))
+            v = create_view("/dashboard", "Dashboard", body)
         elif r == "/invoices":
             body = invoices_view.build_view(page)
-            page.views.append(create_view("/invoices", "Daftar Invoice", body))
+            v = create_view("/invoices", "Daftar Invoice", body)
         elif r.startswith("/invoices/cabang/"):
             cabang_id = int(r.split("/")[3])
             body = invoices_view.build_folder_list(page, cabang_id, r, show_back=True)
-            page.views.append(create_view(r, "Daftar Invoice", body))
+            v = create_view(r, "Daftar Invoice", body)
         elif r.startswith("/invoices/"):
             folder_id = int(r.split("/")[2])
-            # 1 folder = 1 invoice (kebijakan baru): kalau folder ini
-            # sudah punya PERSIS 1 invoice, langsung lompat ke halaman
-            # transaksi harian invoice itu -- lewati halaman daftar
-            # invoice sama sekali. Tampilkan loading dulu supaya user
-            # tidak lihat layar kosong/macet selagi request jalan.
             page.views.append(_loading_view(r))
             page.update()
             try:
@@ -144,26 +157,41 @@ def main(page: ft.Page):
                 return
             page.views.pop()
             body = folder_detail_view.build_view(page, folder_id)
-            page.views.append(create_view(r, "Detail Folder", body))
+            v = create_view(r, "Detail Folder", body)
         elif r.startswith("/invoice/"):
             invoice_id = int(r.split("/")[2])
             body = invoice_detail_view.build_view(page, invoice_id)
-            page.views.append(create_view(r, "Detail Folder", body))
+            v = create_view(r, "Detail Folder", body)
         elif r.startswith("/pendapatan-pengeluaran"):
             body = pendapatan_pengeluaran_view.build_view(page)
-            page.views.append(create_view(r, "Pendapatan & Pengeluaran", body))
+            v = create_view(r, "Pendapatan & Pengeluaran", body)
+        elif r.startswith("/supir-kenek"):
+            body = supir_kenek_view.build_view(page)
+            v = create_view(r, "Operasional Supir & Kenek", body)
+        elif r.startswith("/pengambilan-pabrik"):
+            body = pengambilan_pabrik_view.build_view(page)
+            v = create_view(r, "Pengambilan Pabrik", body)
+        elif r.startswith("/pengambilan-balaraja"):
+            body = pengambilan_balaraja_view.build_view(page)
+            v = create_view(r, "Pengambilan Balaraja", body)
+        elif r.startswith("/rekap-bulanan"):
+            body = rekap_bulanan_view.build_view(page)
+            v = create_view(r, "Rekap Bulanan Gabungan", body)
         elif r == "/users":
             body = users_view.build_view(page)
-            page.views.append(create_view("/users", "Kelola User", body))
+            v = create_view("/users", "Kelola User", body)
         elif r == "/activity-log":
             body = activity_log_view.build_view(page)
-            page.views.append(create_view("/activity-log", "Log Aktivitas", body))
+            v = create_view("/activity-log", "Log Aktivitas", body)
         elif r == "/cabang":
             body = cabang_view.build_view(page)
-            page.views.append(create_view("/cabang", "Kelola Cabang", body))
+            v = create_view("/cabang", "Kelola Cabang", body)
         else:
             body = login_view.build_view(page) if not app_state.is_logged_in() else dashboard_view.build_view(page)
-            page.views.append(create_view(page.route, "Dashboard", body))
+            v = create_view(page.route, "Dashboard", body)
+
+        page.views.clear()
+        page.views.append(v)
         page.update()
 
     def view_pop(view):

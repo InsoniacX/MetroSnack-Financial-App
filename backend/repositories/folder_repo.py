@@ -7,38 +7,79 @@ MONTH = {
 
 
 def get_dashboard_summary_raw(cabang_id=None):
-    """Angka mentah saja (modal, masuk_uang, masuk_barang). Perhitungan
-    Lebih/Kurang/Sisa Hutang dilakukan di services/finance_service.py,
-    BUKAN di sini, supaya tetap satu sumber kebenaran formula."""
-    if cabang_id is None:
-        row = fetch_one("""
-            SELECT COALESCE(SUM(i.invoice_bon), 0), COALESCE(SUM(t.masuk_uang), 0), COALESCE(SUM(t.masuk_barang), 0)
+    """Mengagregasikan transaksi per invoice terlebih dahulu agar
+    invoice_bon tidak terhitung berulang untuk setiap transaksi."""
+
+    where_clause = ""
+    params = ()
+
+    if cabang_id is not None:
+        where_clause = "WHERE cabang_id = %s"
+        params = (cabang_id,)
+
+    row = fetch_one(f"""
+        WITH per_invoice AS (
+            SELECT
+                i.id,
+                f.cabang_id,
+                i.invoice_bon AS modal_pusat,
+                COALESCE(SUM(t.masuk_uang), 0) AS masuk_uang,
+                COALESCE(SUM(t.masuk_barang), 0) AS masuk_barang
             FROM invoice i
-            LEFT JOIN transaksi_harian t ON t.invoice_id = i.id
-        """)
-    else:
-        row = fetch_one("""
-            SELECT COALESCE(SUM(i.invoice_bon), 0), COALESCE(SUM(t.masuk_uang), 0), COALESCE(SUM(t.masuk_barang), 0)
-            FROM invoice i
-            JOIN folder_bulan f ON f.id = i.folder_bulan_id
-            LEFT JOIN transaksi_harian t ON t.invoice_id = i.id
-            WHERE f.cabang_id = %s
-        """, (cabang_id,))
+            JOIN folder_bulan f
+                ON f.id = i.folder_bulan_id
+            LEFT JOIN transaksi_harian t
+                ON t.invoice_id = i.id
+            GROUP BY
+                i.id,
+                f.cabang_id,
+                i.invoice_bon
+        )
+        SELECT
+            COALESCE(SUM(modal_pusat), 0),
+            COALESCE(SUM(masuk_uang), 0),
+            COALESCE(SUM(masuk_barang), 0)
+        FROM per_invoice
+        {where_clause}
+    """, params)
+
     modal, omzet, barang = row
-    return {"modal_pusat": modal, "masuk_uang": omzet, "masuk_barang": barang}
+    return {
+        "modal_pusat": modal,
+        "masuk_uang": omzet,
+        "masuk_barang": barang,
+    }
 
 
 def get_cabang_breakdown():
-    """Per-cabang: modal, masuk_uang, masuk_barang mentah -> dipakai dashboard admin pusat."""
+    """Per-cabang tanpa menggandakan modal untuk setiap transaksi."""
     return fetch_all("""
-        SELECT c.id, c.nama_cabang,
-            COALESCE(SUM(i.invoice_bon), 0) AS total_modal,
-            COALESCE(SUM(t.masuk_uang), 0) AS total_omzet,
-            COALESCE(SUM(t.masuk_barang), 0) AS total_barang
+        WITH per_invoice AS (
+            SELECT
+                i.id,
+                f.cabang_id,
+                i.invoice_bon AS modal_pusat,
+                COALESCE(SUM(t.masuk_uang), 0) AS masuk_uang,
+                COALESCE(SUM(t.masuk_barang), 0) AS masuk_barang
+            FROM invoice i
+            JOIN folder_bulan f
+                ON f.id = i.folder_bulan_id
+            LEFT JOIN transaksi_harian t
+                ON t.invoice_id = i.id
+            GROUP BY
+                i.id,
+                f.cabang_id,
+                i.invoice_bon
+        )
+        SELECT
+            c.id,
+            c.nama_cabang,
+            COALESCE(SUM(pi.modal_pusat), 0) AS total_modal,
+            COALESCE(SUM(pi.masuk_uang), 0) AS total_omzet,
+            COALESCE(SUM(pi.masuk_barang), 0) AS total_barang
         FROM cabang c
-        LEFT JOIN folder_bulan f ON f.cabang_id = c.id
-        LEFT JOIN invoice i ON i.folder_bulan_id = f.id
-        LEFT JOIN transaksi_harian t ON t.invoice_id = i.id
+        LEFT JOIN per_invoice pi
+            ON pi.cabang_id = c.id
         WHERE c.aktif = TRUE
         GROUP BY c.id, c.nama_cabang
         ORDER BY c.nama_cabang
@@ -64,38 +105,111 @@ def get_cabang_summary():
 
 def get_monthly_trend_raw(cabang_id=None, limit_months=6):
     base_select = """
-        SELECT f.id, f.nama_folder, f.bulan, f.tahun,
-            COALESCE(SUM(i.invoice_bon), 0) AS total_modal,
-            COALESCE(SUM(t.masuk_uang), 0) AS total_omzet,
-            COALESCE(SUM(t.masuk_barang), 0) AS total_barang
+        WITH per_invoice AS (
+            SELECT
+                i.id,
+                i.folder_bulan_id,
+                i.invoice_bon AS modal_pusat,
+                COALESCE(SUM(t.masuk_uang), 0) AS masuk_uang,
+                COALESCE(SUM(t.masuk_barang), 0) AS masuk_barang
+            FROM invoice i
+            LEFT JOIN transaksi_harian t
+                ON t.invoice_id = i.id
+            GROUP BY
+                i.id,
+                i.folder_bulan_id,
+                i.invoice_bon
+        )
+        SELECT
+            f.id,
+            f.nama_folder,
+            f.bulan,
+            f.tahun,
+            COALESCE(SUM(pi.modal_pusat), 0) AS total_modal,
+            COALESCE(SUM(pi.masuk_uang), 0) AS total_omzet,
+            COALESCE(SUM(pi.masuk_barang), 0) AS total_barang
         FROM folder_bulan f
-        LEFT JOIN invoice i ON i.folder_bulan_id = f.id
-        LEFT JOIN transaksi_harian t ON t.invoice_id = i.id
+        LEFT JOIN per_invoice pi
+            ON pi.folder_bulan_id = f.id
     """
+
     if cabang_id is None:
-        rows = fetch_all(base_select + " GROUP BY f.id ORDER BY f.tahun DESC, f.bulan DESC LIMIT %s", (limit_months,))
+        rows = fetch_all(
+            base_select
+            + """
+                GROUP BY f.id
+                ORDER BY f.tahun DESC, f.bulan DESC
+                LIMIT %s
+            """,
+            (limit_months,),
+        )
     else:
-        rows = fetch_all(base_select + " WHERE f.cabang_id = %s GROUP BY f.id ORDER BY f.tahun DESC, f.bulan DESC LIMIT %s",
-                          (cabang_id, limit_months))
+        rows = fetch_all(
+            base_select
+            + """
+                WHERE f.cabang_id = %s
+                GROUP BY f.id
+                ORDER BY f.tahun DESC, f.bulan DESC
+                LIMIT %s
+            """,
+            (cabang_id, limit_months),
+        )
+
     return list(reversed(rows))
 
 
 def get_folders(cabang_id=None):
     base_select = """
-        SELECT f.id, f.nama_folder, f.bulan, f.tahun, c.nama_cabang,
-            COUNT(DISTINCT i.id) AS total_invoice,
-            COALESCE(SUM(i.invoice_bon), 0) AS total_modal,
-            COALESCE(SUM(t.masuk_uang), 0) AS total_omzet,
-            COALESCE(SUM(t.masuk_barang), 0) AS total_barang
+        WITH per_invoice AS (
+            SELECT
+                i.id,
+                i.folder_bulan_id,
+                i.invoice_bon AS modal_pusat,
+                COALESCE(SUM(t.masuk_uang), 0) AS masuk_uang,
+                COALESCE(SUM(t.masuk_barang), 0) AS masuk_barang
+            FROM invoice i
+            LEFT JOIN transaksi_harian t
+                ON t.invoice_id = i.id
+            GROUP BY
+                i.id,
+                i.folder_bulan_id,
+                i.invoice_bon
+        )
+        SELECT
+            f.id,
+            f.nama_folder,
+            f.bulan,
+            f.tahun,
+            c.nama_cabang,
+            COUNT(pi.id) AS total_invoice,
+            COALESCE(SUM(pi.modal_pusat), 0) AS total_modal,
+            COALESCE(SUM(pi.masuk_uang), 0) AS total_omzet,
+            COALESCE(SUM(pi.masuk_barang), 0) AS total_barang
         FROM folder_bulan f
-        JOIN cabang c ON c.id = f.cabang_id
-        LEFT JOIN invoice i ON i.folder_bulan_id = f.id
-        LEFT JOIN transaksi_harian t ON t.invoice_id = i.id
+        JOIN cabang c
+            ON c.id = f.cabang_id
+        LEFT JOIN per_invoice pi
+            ON pi.folder_bulan_id = f.id
     """
+
     if cabang_id is None:
-        return fetch_all(base_select + " GROUP BY f.id, c.nama_cabang ORDER BY f.tahun DESC, f.bulan DESC")
-    return fetch_all(base_select + " WHERE f.cabang_id = %s GROUP BY f.id, c.nama_cabang ORDER BY f.tahun DESC, f.bulan DESC",
-                      (cabang_id,))
+        return fetch_all(
+            base_select
+            + """
+                GROUP BY f.id, c.nama_cabang
+                ORDER BY f.tahun DESC, f.bulan DESC
+            """
+        )
+
+    return fetch_all(
+        base_select
+        + """
+            WHERE f.cabang_id = %s
+            GROUP BY f.id, c.nama_cabang
+            ORDER BY f.tahun DESC, f.bulan DESC
+        """,
+        (cabang_id,),
+    )
 
 
 def create_folder(bulan, tahun, cabang_id, user_id):
