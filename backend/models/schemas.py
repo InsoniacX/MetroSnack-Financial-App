@@ -220,3 +220,94 @@ class PendapatanPengeluaranUpdate(BaseModel):
         max_digits=14,
         decimal_places=2,
     )
+
+class SupirKenekCreate(BaseModel):
+    cabang_id: int = Field(..., gt=0)
+    nama: str = Field(..., max_length=100)
+
+    @field_validator("nama", mode="before")
+    @classmethod
+    def _validate_nama(cls, value):
+        return _strip_required_text(value)
+
+
+class SupirKenekUpdate(BaseModel):
+    nama: str = Field(..., max_length=100)
+
+    @field_validator("nama", mode="before")
+    @classmethod
+    def _validate_nama(cls, value):
+        return _strip_required_text(value)
+
+
+class OperasionalMobilBase(BaseModel):
+    tanggal: date
+    supir_id: int = Field(..., gt=0)
+    kenek_id: Optional[int] = Field(default=None, gt=0)
+    uang_jalan: Decimal = Field(
+        ...,
+        gt=0,
+        max_digits=14,
+        decimal_places=2,
+    )
+    keterangan: Optional[str] = Field(
+        default=None,
+        max_length=500,
+    )
+
+    @field_validator("keterangan", mode="before")
+    @classmethod
+    def _normalize_keterangan(cls, value):
+        if not isinstance(value, str):
+            return value
+
+        cleaned = value.strip()
+        return cleaned or None
+
+    @model_validator(mode="after")
+    def _supir_dan_kenek_harus_berbeda(self):
+        if (
+            self.kenek_id is not None
+            and self.kenek_id == self.supir_id
+        ):
+            raise ValueError(
+                "Supir dan kenek tidak boleh orang yang sama"
+            )
+
+        return self
+
+
+class OperasionalMobilCreate(OperasionalMobilBase):
+    cabang_id: int = Field(..., gt=0)
+
+
+class OperasionalMobilUpdate(OperasionalMobilBase):
+    pass
+
+
+class PengambilanKasBase(BaseModel):
+    tanggal: date
+    keterangan: str = Field(
+        ...,
+        min_length=1,
+        max_length=150,
+    )
+    nominal: Decimal = Field(
+        ...,
+        gt=0,
+        max_digits=14,
+        decimal_places=2,
+    )
+
+    @field_validator("keterangan", mode="before")
+    @classmethod
+    def _validate_keterangan(cls, value):
+        return _strip_required_text(value)
+
+
+class PengambilanKasCreate(PengambilanKasBase):
+    cabang_id: int = Field(..., gt=0)
+
+
+class PengambilanKasUpdate(PengambilanKasBase):
+    pass

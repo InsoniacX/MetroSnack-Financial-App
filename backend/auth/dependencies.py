@@ -58,6 +58,11 @@ def get_current_user(
 
     uid, username, role, cabang_id, aktif, cabang_aktif = row
 
+    if not aktif:
+        raise _credentials_error(
+            "Akun tidak aktif, hubungi admin"
+        )
+
     if cabang_id is not None and cabang_aktif is not True:
         raise _credentials_error(
             "Cabang tidak aktif, hubungi admin pusat"
