@@ -162,3 +162,4 @@ def get_operasional_summary(
         "total_trip": total_trip,
         "total_uang_jalan": total_uang_jalan,
     }
+
