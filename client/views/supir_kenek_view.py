@@ -364,13 +364,6 @@ def build_view(page: ft.Page):
         value="Semua",
     )
 
-    filter_cabang_dropdown = ft.Dropdown(
-        label="Cabang",
-        width=180,
-        options=[ft.dropdown.Option("Semua", "Semua Cabang")] + [ft.dropdown.Option(str(c[0]), c[1]) for c in cabang_list],
-        value="Semua" if filter_state["cabang_id"] is None else str(filter_state["cabang_id"]),
-    )
-
     search_field = ft.TextField(
         label="Cari Transaksi",
         hint_text="Nama supir, kenek, rute, keterangan...",
@@ -395,10 +388,6 @@ def build_view(page: ft.Page):
         sel_p = filter_personel_dropdown.value
         filter_state["personel_id"] = None if sel_p == "Semua" or not sel_p else int(sel_p)
 
-        if is_pusat:
-            sel_cbg = filter_cabang_dropdown.value
-            filter_state["cabang_id"] = None if sel_cbg == "Semua" else int(sel_cbg)
-
         filter_state["search"] = search_field.value or ""
         refresh_table_content()
 
@@ -407,26 +396,20 @@ def build_view(page: ft.Page):
         filter_end_field.value = ""
         filter_sort_dropdown.value = "desc"
         filter_personel_dropdown.value = "Semua"
-        if is_pusat:
-            filter_cabang_dropdown.value = "Semua"
         search_field.value = ""
         apply_filter()
 
     search_field.on_submit = apply_filter
     filter_sort_dropdown.on_change = apply_filter
     filter_personel_dropdown.on_change = apply_filter
-    if is_pusat:
-        filter_cabang_dropdown.on_change = apply_filter
 
     filter_controls = [
         filter_start_field,
         filter_end_field,
         filter_sort_dropdown,
         filter_personel_dropdown,
+        search_field,
     ]
-    if is_pusat:
-        filter_controls.append(filter_cabang_dropdown)
-    filter_controls.append(search_field)
 
     filter_card = ft.Container(
         content=ft.Column([
