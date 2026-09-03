@@ -7,11 +7,48 @@ from components.metric_card import metric_card
 from utils.formatting import rp
 from utils.pdf_export import generate_rekap_bulanan_pdf
 from db.activity_repo import log_activity
-from db.supir_kenek_repo import get_pengeluaran_supir_kenek, get_rekap_supir_kenek_bulanan
+from db.supir_kenek_repo import get_pengeluaran_supir_kenek
 from db.pengambilan_pabrik_repo import get_pengambilan_pabrik
 from db.pengambilan_balaraja_repo import get_pengambilan_balaraja
+from db.folder_repo import get_folders
 from db.cabang_repo import get_active_cabang
 from state import app_state
+
+
+def get_rekap_available_years(cabang_id=None):
+    """Mengambil daftar tahun yang hanya ada di database melalui API."""
+    years = set()
+    try:
+        for p in get_pengambilan_pabrik(cabang_id=cabang_id):
+            tgl = p.get("tanggal")
+            if hasattr(tgl, "year"):
+                years.add(tgl.year)
+    except Exception:
+        pass
+    try:
+        for b in get_pengambilan_balaraja(cabang_id=cabang_id):
+            tgl = b.get("tanggal")
+            if hasattr(tgl, "year"):
+                years.add(tgl.year)
+    except Exception:
+        pass
+    try:
+        for s in get_pengeluaran_supir_kenek(cabang_id=cabang_id):
+            tgl = s.get("tanggal")
+            if hasattr(tgl, "year"):
+                years.add(tgl.year)
+    except Exception:
+        pass
+    try:
+        folders = get_folders(cabang_id=cabang_id)
+        for f in folders:
+            if len(f) > 3 and f[3]:
+                years.add(int(f[3]))
+    except Exception:
+        pass
+    if not years:
+        years.add(date.today().year)
+    return sorted(list(years), reverse=True)
 
 
 def build_view(page: ft.Page):
@@ -20,10 +57,14 @@ def build_view(page: ft.Page):
     is_dark = page.theme_mode == ft.ThemeMode.DARK
     today = date.today()
 
+    initial_cabang_id = None if is_pusat else actor.get("cabang_id")
+    available_years = get_rekap_available_years(initial_cabang_id)
+    initial_year = available_years[0] if available_years else today.year
+
     filter_state = {
         "bulan": today.month,
-        "tahun": today.year,
-        "cabang_id": None if is_pusat else actor.get("cabang_id"),
+        "tahun": initial_year,
+        "cabang_id": initial_cabang_id,
     }
 
     cabang_list = []
@@ -44,7 +85,7 @@ def build_view(page: ft.Page):
     filter_tahun_dropdown = ft.Dropdown(
         label="Tahun",
         width=130,
-        options=[ft.dropdown.Option(str(y), str(y)) for y in range(2024, 2030)],
+        options=[ft.dropdown.Option(str(y), str(y)) for y in available_years],
         value=str(filter_state["tahun"]),
     )
 
@@ -56,6 +97,18 @@ def build_view(page: ft.Page):
     )
 
     def apply_filter(e=None):
+        if is_pusat and e and e.control == filter_cabang_dropdown:
+            sel_cbg = filter_cabang_dropdown.value
+            filter_state["cabang_id"] = None if sel_cbg == "Semua" else int(sel_cbg)
+            cbg_years = get_rekap_available_years(filter_state["cabang_id"])
+            filter_tahun_dropdown.options = [ft.dropdown.Option(str(y), str(y)) for y in cbg_years]
+            if filter_tahun_dropdown.value not in [str(y) for y in cbg_years]:
+                filter_tahun_dropdown.value = str(cbg_years[0])
+            try:
+                filter_tahun_dropdown.update()
+            except Exception:
+                pass
+
         filter_state["bulan"] = int(filter_bulan_dropdown.value or today.month)
         filter_state["tahun"] = int(filter_tahun_dropdown.value or today.year)
         if is_pusat:
@@ -63,18 +116,20 @@ def build_view(page: ft.Page):
             filter_state["cabang_id"] = None if sel_cbg == "Semua" else int(sel_cbg)
         refresh_rekap()
 
+
     filter_bulan_dropdown.on_change = apply_filter
     filter_tahun_dropdown.on_change = apply_filter
-    filter_cabang_dropdown.on_change = apply_filter
+    if is_pusat:
+        filter_cabang_dropdown.on_change = apply_filter
 
     filter_card = ft.Container(
         content=ft.Row([
-            ft.Icon(ft.Icons.CALENDAR_MONTH, color=ft.Colors.BLUE_700, size=22),
+            ft.Icon(ft.Icons.CALENDAR_MONTH, color=ft.Colors.INDIGO_700, size=22),
             ft.Text("Periode Rekap Bulanan:", weight=ft.FontWeight.W_500, size=15),
             filter_bulan_dropdown,
             filter_tahun_dropdown,
             filter_cabang_dropdown if is_pusat else ft.Container(),
-            ft.ElevatedButton("Segarkan", icon=ft.Icons.REFRESH, on_click=apply_filter, bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE),
+            ft.ElevatedButton("Segarkan", icon=ft.Icons.REFRESH, on_click=apply_filter, bgcolor=ft.Colors.INDIGO_700, color=ft.Colors.WHITE),
         ], wrap=True, spacing=12, alignment=ft.MainAxisAlignment.START),
         bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE,
         border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_300),
@@ -105,7 +160,7 @@ def build_view(page: ft.Page):
             fc.BarChartGroup(
                 x=0,
                 rods=[
-                    fc.BarChartRod(from_y=0, to_y=k_val, width=28, color=ft.Colors.RED_400, border_radius=6, tooltip=f"Operasional Kenek/Supir: {rp(k_val)}"),
+                    fc.BarChartRod(from_y=0, to_y=k_val, width=28, color=ft.Colors.RED_400, border_radius=6, tooltip=f"Operasional Mobil: {rp(k_val)}"),
                 ],
             ),
             fc.BarChartGroup(
@@ -123,9 +178,9 @@ def build_view(page: ft.Page):
         ]
 
         bottom_labels = [
-            fc.ChartAxisLabel(value=0, label=ft.Text("Kenek/Supir", size=11, weight=ft.FontWeight.W_500, color=ft.Colors.GREY_300 if is_dark else ft.Colors.GREY_800)),
-            fc.ChartAxisLabel(value=1, label=ft.Text("Pabrik", size=11, weight=ft.FontWeight.W_500, color=ft.Colors.GREY_300 if is_dark else ft.Colors.GREY_800)),
-            fc.ChartAxisLabel(value=2, label=ft.Text("Balaraja", size=11, weight=ft.FontWeight.W_500, color=ft.Colors.GREY_300 if is_dark else ft.Colors.GREY_800)),
+            fc.ChartAxisLabel(value=0, label=ft.Text("Operasional Mobil", size=11, weight=ft.FontWeight.W_500, color=ft.Colors.GREY_300 if is_dark else ft.Colors.GREY_800)),
+            fc.ChartAxisLabel(value=1, label=ft.Text("Pengambilan Pabrik", size=11, weight=ft.FontWeight.W_500, color=ft.Colors.GREY_300 if is_dark else ft.Colors.GREY_800)),
+            fc.ChartAxisLabel(value=2, label=ft.Text("Pengambilan Balaraja", size=11, weight=ft.FontWeight.W_500, color=ft.Colors.GREY_300 if is_dark else ft.Colors.GREY_800)),
         ]
 
         chart = fc.BarChart(
@@ -138,14 +193,14 @@ def build_view(page: ft.Page):
         )
 
         legend = ft.Row([
-            ft.Row([ft.Container(width=12, height=12, bgcolor=ft.Colors.RED_400, border_radius=3), ft.Text("Operasional Kenek & Supir", size=12)], spacing=6),
+            ft.Row([ft.Container(width=12, height=12, bgcolor=ft.Colors.RED_400, border_radius=3), ft.Text("Operasional Mobil", size=12)], spacing=6),
             ft.Row([ft.Container(width=12, height=12, bgcolor=ft.Colors.INDIGO_400, border_radius=3), ft.Text("Pengambilan Pabrik", size=12)], spacing=6),
             ft.Row([ft.Container(width=12, height=12, bgcolor=ft.Colors.AMBER_400, border_radius=3), ft.Text("Pengambilan Balaraja", size=12)], spacing=6),
         ], spacing=16, wrap=True)
 
         return ft.Column([
             ft.Row([
-                ft.Icon(ft.Icons.BAR_CHART, size=18, color=ft.Colors.BLUE_700),
+                ft.Icon(ft.Icons.BAR_CHART, size=18, color=ft.Colors.INDIGO_700),
                 ft.Text("Grafik Komparasi Pengeluaran Bulanan", size=15, weight=ft.FontWeight.W_600),
             ]),
             ft.Container(height=4),
@@ -160,31 +215,34 @@ def build_view(page: ft.Page):
         cabang_id = filter_state["cabang_id"]
         bulan_nama = MONTH[bulan]
 
-        # 1. Kenek & Supir Data
-        kenek_items = get_pengeluaran_supir_kenek(cabang_id=cabang_id, bulan=bulan, tahun=tahun, sort_order="desc")
-        kenek_sum = sum(it["nominal"] for it in kenek_items)
+        try:
+            kenek_items = get_pengeluaran_supir_kenek(cabang_id=cabang_id, bulan=bulan, tahun=tahun, sort_order="desc")
+        except Exception:
+            kenek_items = []
+        kenek_sum = sum((it["nominal"] for it in kenek_items), Decimal(0))
         kenek_count = len(kenek_items)
 
-        # 2. Pengambilan Pabrik Data
-        pabrik_items = get_pengambilan_pabrik(cabang_id=cabang_id, bulan=bulan, tahun=tahun, sort_order="desc")
-        pabrik_sum = sum(it["total_harga"] for it in pabrik_items)
+        try:
+            pabrik_items = get_pengambilan_pabrik(cabang_id=cabang_id, bulan=bulan, tahun=tahun, sort_order="desc")
+        except Exception:
+            pabrik_items = []
+        pabrik_sum = sum((it["nominal"] for it in pabrik_items), Decimal(0))
         pabrik_count = len(pabrik_items)
-        pabrik_qty = sum(it["qty"] for it in pabrik_items)
 
-        # 3. Pengambilan Balaraja Data
-        balaraja_items = get_pengambilan_balaraja(cabang_id=cabang_id, bulan=bulan, tahun=tahun, sort_order="desc")
-        balaraja_sum = sum(it["total_harga"] for it in balaraja_items)
+        try:
+            balaraja_items = get_pengambilan_balaraja(cabang_id=cabang_id, bulan=bulan, tahun=tahun, sort_order="desc")
+        except Exception:
+            balaraja_items = []
+        balaraja_sum = sum((it["nominal"] for it in balaraja_items), Decimal(0))
         balaraja_count = len(balaraja_items)
-        balaraja_qty = sum(it["qty"] for it in balaraja_items)
 
-        # Grand Total
         grand_total = kenek_sum + pabrik_sum + balaraja_sum
         total_trx = kenek_count + pabrik_count + balaraja_count
 
         # Update Top Metric Cards
         metric_kenek_card.content = metric_card(
             page,
-            f"Operasional Kenek/Supir ({bulan_nama})",
+            f"Operasional Mobil ({bulan_nama})",
             rp(kenek_sum),
             light_color=ft.Colors.RED_50,
             light_text_color=ft.Colors.RED_900,
@@ -211,7 +269,7 @@ def build_view(page: ft.Page):
         )
         metric_grand_card.content = metric_card(
             page,
-            f"Grand Total Pengeluaran & Stok",
+            f"Grand Total Pengeluaran",
             rp(grand_total),
             light_color=ft.Colors.BLUE_50,
             light_text_color=ft.Colors.BLUE_900,
@@ -219,7 +277,6 @@ def build_view(page: ft.Page):
             dark_text_color=ft.Colors.BLUE_100,
         )
 
-        # Percentages
         pct_kenek = (kenek_sum / grand_total * 100) if grand_total > 0 else Decimal(0)
         pct_pabrik = (pabrik_sum / grand_total * 100) if grand_total > 0 else Decimal(0)
         pct_balaraja = (balaraja_sum / grand_total * 100) if grand_total > 0 else Decimal(0)
@@ -239,10 +296,10 @@ def build_view(page: ft.Page):
                 ft.DataCell(
                     ft.Row([
                         ft.Container(width=10, height=10, bgcolor=ft.Colors.RED_500, border_radius=2),
-                        ft.Text("Operasional Kenek & Supir", weight=ft.FontWeight.W_600),
+                        ft.Text("Operasional Mobil (Supir & Kenek)", weight=ft.FontWeight.W_600),
                     ], spacing=8)
                 ),
-                ft.DataCell(ft.Text(f"{kenek_count} Transaksi")),
+                ft.DataCell(ft.Text(f"{kenek_count} Perjalanan")),
                 ft.DataCell(ft.Text(rp(kenek_sum), weight=ft.FontWeight.W_600)),
                 ft.DataCell(
                     ft.Row([
@@ -255,10 +312,10 @@ def build_view(page: ft.Page):
                 ft.DataCell(
                     ft.Row([
                         ft.Container(width=10, height=10, bgcolor=ft.Colors.INDIGO_500, border_radius=2),
-                        ft.Text("Pengambilan Barang Pabrik", weight=ft.FontWeight.W_600),
+                        ft.Text("Pengambilan Kas Pabrik", weight=ft.FontWeight.W_600),
                     ], spacing=8)
                 ),
-                ft.DataCell(ft.Text(f"{pabrik_count} Trx ({int(pabrik_qty)} Unit)")),
+                ft.DataCell(ft.Text(f"{pabrik_count} Transaksi")),
                 ft.DataCell(ft.Text(rp(pabrik_sum), weight=ft.FontWeight.W_600)),
                 ft.DataCell(
                     ft.Row([
@@ -271,10 +328,10 @@ def build_view(page: ft.Page):
                 ft.DataCell(
                     ft.Row([
                         ft.Container(width=10, height=10, bgcolor=ft.Colors.AMBER_600, border_radius=2),
-                        ft.Text("Pengambilan Barang Balaraja", weight=ft.FontWeight.W_600),
+                        ft.Text("Pengambilan Kas Balaraja", weight=ft.FontWeight.W_600),
                     ], spacing=8)
                 ),
-                ft.DataCell(ft.Text(f"{balaraja_count} Trx ({int(balaraja_qty)} Unit)")),
+                ft.DataCell(ft.Text(f"{balaraja_count} Transaksi")),
                 ft.DataCell(ft.Text(rp(balaraja_sum), weight=ft.FontWeight.W_600)),
                 ft.DataCell(
                     ft.Row([
@@ -308,8 +365,8 @@ def build_view(page: ft.Page):
         breakdown_table_container.content = ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.Icon(ft.Icons.PIE_CHART_OUTLINE, size=18, color=ft.Colors.BLUE_700),
-                    ft.Text("Tabel Proporsi Pengeluaran & Pengadaan", size=15, weight=ft.FontWeight.W_600),
+                    ft.Icon(ft.Icons.PIE_CHART_OUTLINE, size=18, color=ft.Colors.INDIGO_700),
+                    ft.Text("Tabel Proporsi Pengeluaran Bulanan", size=15, weight=ft.FontWeight.W_600),
                 ]),
                 ft.Container(height=4),
                 ft.Row([breakdown_table], scroll=ft.ScrollMode.AUTO),
@@ -320,10 +377,10 @@ def build_view(page: ft.Page):
             padding=16,
         )
 
-        # Tab Rincian 1: Kenek Table
+        # Tab Rincian 1: Operasional Mobil Table
         if not kenek_items:
             detail_kenek_container.content = ft.Container(
-                content=ft.Text("Tidak ada catatan pengeluaran supir/kenek pada bulan ini.", color=ft.Colors.GREY_500),
+                content=ft.Text("Tidak ada catatan operasional mobil pada bulan ini.", color=ft.Colors.GREY_500),
                 padding=24, alignment=ft.Alignment.CENTER,
             )
         else:
@@ -336,12 +393,11 @@ def build_view(page: ft.Page):
                 if is_pusat:
                     cells.append(ft.DataCell(ft.Text(it.get("nama_cabang", "-"))))
                 cells.extend([
-                    ft.DataCell(ft.Text(it["nama_personel"], weight=ft.FontWeight.W_500)),
-                    ft.DataCell(ft.Text(it["peran"])),
-                    ft.DataCell(ft.Text(it["kategori_biaya"])),
-                    ft.DataCell(ft.Text(it["keterangan"] or "-")),
+                    ft.DataCell(ft.Text(it.get("supir_nama") or "-", weight=ft.FontWeight.W_500)),
+                    ft.DataCell(ft.Text(it.get("kenek_nama") or "-")),
+                    ft.DataCell(ft.Text(it.get("keterangan") or "-")),
                     ft.DataCell(ft.Text(rp(it["nominal"]), weight=ft.FontWeight.W_600, color=ft.Colors.RED_600)),
-                    ft.DataCell(ft.Text(it["nota"] or "-")),
+                    ft.DataCell(ft.Text(it.get("username") or "-", color=ft.Colors.GREY_500)),
                 ])
                 k_rows.append(ft.DataRow(cells=cells))
 
@@ -349,12 +405,11 @@ def build_view(page: ft.Page):
             if is_pusat:
                 k_cols.append(ft.DataColumn(ft.Text("Cabang")))
             k_cols.extend([
-                ft.DataColumn(ft.Text("Nama Personel")),
-                ft.DataColumn(ft.Text("Peran")),
-                ft.DataColumn(ft.Text("Kategori")),
+                ft.DataColumn(ft.Text("Supir")),
+                ft.DataColumn(ft.Text("Kenek")),
                 ft.DataColumn(ft.Text("Keterangan")),
-                ft.DataColumn(ft.Text("Nominal")),
-                ft.DataColumn(ft.Text("Nota")),
+                ft.DataColumn(ft.Text("Uang Jalan")),
+                ft.DataColumn(ft.Text("Diinput Oleh")),
             ])
             detail_kenek_container.content = ft.Row([
                 ft.DataTable(columns=k_cols, rows=k_rows, border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_200), border_radius=8, heading_row_color=ft.Colors.GREY_800 if is_dark else ft.Colors.GREY_100)
@@ -370,20 +425,15 @@ def build_view(page: ft.Page):
             p_rows = []
             for it in pabrik_items:
                 tgl = it["tanggal"].strftime("%d-%m-%Y") if hasattr(it["tanggal"], "strftime") else str(it["tanggal"])
-                qty_txt = f"{int(it['qty']) if it['qty'].is_integer() else it['qty']} {it['satuan']}"
                 cells = [
                     ft.DataCell(ft.Text(tgl)),
                 ]
                 if is_pusat:
                     cells.append(ft.DataCell(ft.Text(it.get("nama_cabang", "-"))))
                 cells.extend([
-                    ft.DataCell(ft.Text(it["nama_pabrik"], weight=ft.FontWeight.W_500)),
-                    ft.DataCell(ft.Text(it["nama_barang"])),
-                    ft.DataCell(ft.Text(qty_txt)),
-                    ft.DataCell(ft.Text(rp(it["harga_satuan"]))),
-                    ft.DataCell(ft.Text(rp(it["total_harga"]), weight=ft.FontWeight.W_600, color=ft.Colors.BLUE_700 if not is_dark else ft.Colors.BLUE_300)),
-                    ft.DataCell(ft.Text(it["no_surat_jalan"] or "-")),
-                    ft.DataCell(ft.Text(it["status_pembayaran"])),
+                    ft.DataCell(ft.Text(it.get("keterangan") or "-", weight=ft.FontWeight.W_500)),
+                    ft.DataCell(ft.Text(rp(it["nominal"]), weight=ft.FontWeight.W_600, color=ft.Colors.INDIGO_400 if is_dark else ft.Colors.INDIGO_700)),
+                    ft.DataCell(ft.Text(it.get("username") or "-", color=ft.Colors.GREY_500)),
                 ])
                 p_rows.append(ft.DataRow(cells=cells))
 
@@ -391,13 +441,9 @@ def build_view(page: ft.Page):
             if is_pusat:
                 p_cols.append(ft.DataColumn(ft.Text("Cabang")))
             p_cols.extend([
-                ft.DataColumn(ft.Text("Pabrik")),
-                ft.DataColumn(ft.Text("Nama Barang")),
-                ft.DataColumn(ft.Text("Qty")),
-                ft.DataColumn(ft.Text("Harga Satuan")),
-                ft.DataColumn(ft.Text("Total")),
-                ft.DataColumn(ft.Text("No. DO/SJ")),
-                ft.DataColumn(ft.Text("Status")),
+                ft.DataColumn(ft.Text("Keterangan / Rincian")),
+                ft.DataColumn(ft.Text("Nominal Kas")),
+                ft.DataColumn(ft.Text("Diinput Oleh")),
             ])
             detail_pabrik_container.content = ft.Row([
                 ft.DataTable(columns=p_cols, rows=p_rows, border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_200), border_radius=8, heading_row_color=ft.Colors.GREY_800 if is_dark else ft.Colors.GREY_100)
@@ -413,20 +459,15 @@ def build_view(page: ft.Page):
             b_rows = []
             for it in balaraja_items:
                 tgl = it["tanggal"].strftime("%d-%m-%Y") if hasattr(it["tanggal"], "strftime") else str(it["tanggal"])
-                qty_txt = f"{int(it['qty']) if it['qty'].is_integer() else it['qty']} {it['satuan']}"
                 cells = [
                     ft.DataCell(ft.Text(tgl)),
                 ]
                 if is_pusat:
                     cells.append(ft.DataCell(ft.Text(it.get("nama_cabang", "-"))))
                 cells.extend([
-                    ft.DataCell(ft.Text(it["lokasi_gudang"], weight=ft.FontWeight.W_500)),
-                    ft.DataCell(ft.Text(it["nama_barang"])),
-                    ft.DataCell(ft.Text(qty_txt)),
-                    ft.DataCell(ft.Text(rp(it["harga_satuan"]))),
-                    ft.DataCell(ft.Text(rp(it["total_harga"]), weight=ft.FontWeight.W_600, color=ft.Colors.BLUE_700 if not is_dark else ft.Colors.BLUE_300)),
-                    ft.DataCell(ft.Text(it["no_surat_jalan"] or "-")),
-                    ft.DataCell(ft.Text(it["driver"] or "-")),
+                    ft.DataCell(ft.Text(it.get("keterangan") or "-", weight=ft.FontWeight.W_500)),
+                    ft.DataCell(ft.Text(rp(it["nominal"]), weight=ft.FontWeight.W_600, color=ft.Colors.AMBER_400 if is_dark else ft.Colors.AMBER_700)),
+                    ft.DataCell(ft.Text(it.get("username") or "-", color=ft.Colors.GREY_500)),
                 ])
                 b_rows.append(ft.DataRow(cells=cells))
 
@@ -434,13 +475,9 @@ def build_view(page: ft.Page):
             if is_pusat:
                 b_cols.append(ft.DataColumn(ft.Text("Cabang")))
             b_cols.extend([
-                ft.DataColumn(ft.Text("Lokasi Gudang")),
-                ft.DataColumn(ft.Text("Nama Barang")),
-                ft.DataColumn(ft.Text("Qty")),
-                ft.DataColumn(ft.Text("Harga Satuan")),
-                ft.DataColumn(ft.Text("Total")),
-                ft.DataColumn(ft.Text("No. Surat Jalan")),
-                ft.DataColumn(ft.Text("Driver")),
+                ft.DataColumn(ft.Text("Keterangan / Rincian")),
+                ft.DataColumn(ft.Text("Nominal Kas")),
+                ft.DataColumn(ft.Text("Diinput Oleh")),
             ])
             detail_balaraja_container.content = ft.Row([
                 ft.DataTable(columns=b_cols, rows=b_rows, border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_200), border_radius=8, heading_row_color=ft.Colors.GREY_800 if is_dark else ft.Colors.GREY_100)
@@ -460,25 +497,26 @@ def build_view(page: ft.Page):
         cabang_id = filter_state["cabang_id"]
         bulan_nama = MONTH[bulan]
 
-        kenek_items = get_pengeluaran_supir_kenek(cabang_id=cabang_id, bulan=bulan, tahun=tahun, sort_order="desc")
-        pabrik_items = get_pengambilan_pabrik(cabang_id=cabang_id, bulan=bulan, tahun=tahun, sort_order="desc")
-        balaraja_items = get_pengambilan_balaraja(cabang_id=cabang_id, bulan=bulan, tahun=tahun, sort_order="desc")
+        try:
+            kenek_items = get_pengeluaran_supir_kenek(cabang_id=cabang_id, bulan=bulan, tahun=tahun, sort_order="desc")
+            pabrik_items = get_pengambilan_pabrik(cabang_id=cabang_id, bulan=bulan, tahun=tahun, sort_order="desc")
+            balaraja_items = get_pengambilan_balaraja(cabang_id=cabang_id, bulan=bulan, tahun=tahun, sort_order="desc")
+        except Exception:
+            kenek_items, pabrik_items, balaraja_items = [], [], []
 
         if not kenek_items and not pabrik_items and not balaraja_items:
             page.show_dialog(ft.SnackBar(ft.Text("Tidak ada data rekap bulanan pada periode ini untuk diexport."), bgcolor=ft.Colors.RED_400))
             return
 
-        kenek_sum = sum(it["nominal"] for it in kenek_items)
-        pabrik_sum = sum(it["total_harga"] for it in pabrik_items)
-        pabrik_qty = sum(it["qty"] for it in pabrik_items)
-        balaraja_sum = sum(it["total_harga"] for it in balaraja_items)
-        balaraja_qty = sum(it["qty"] for it in balaraja_items)
+        kenek_sum = sum((it["nominal"] for it in kenek_items), Decimal(0))
+        pabrik_sum = sum((it["nominal"] for it in pabrik_items), Decimal(0))
+        balaraja_sum = sum((it["nominal"] for it in balaraja_items), Decimal(0))
         grand_total = kenek_sum + pabrik_sum + balaraja_sum
 
         rekap_data = {
             "kenek": {"items": kenek_items, "total": kenek_sum},
-            "pabrik": {"items": pabrik_items, "total": pabrik_sum, "qty": pabrik_qty},
-            "balaraja": {"items": balaraja_items, "total": balaraja_sum, "qty": balaraja_qty},
+            "pabrik": {"items": pabrik_items, "total": pabrik_sum},
+            "balaraja": {"items": balaraja_items, "total": balaraja_sum},
             "grand_total": grand_total,
         }
 
@@ -505,8 +543,6 @@ def build_view(page: ft.Page):
                     allowed_extensions=["pdf"],
                     src_bytes=pdf_bytes,
                 )
-                if not save_path:
-                    return
             else:
                 save_path = await export_picker.save_file(
                     dialog_title="Simpan Laporan Rekap Bulanan PDF",
@@ -514,22 +550,22 @@ def build_view(page: ft.Page):
                     file_type=ft.FilePickerFileType.CUSTOM,
                     allowed_extensions=["pdf"],
                 )
-                if not save_path:
-                    return
-                if not save_path.lower().endswith(".pdf"):
+                if save_path and not save_path.lower().endswith(".pdf"):
                     save_path += ".pdf"
-                generate_rekap_bulanan_pdf(rekap_data, filter_info, is_pusat=is_pusat, output_path=save_path)
+                if save_path:
+                    generate_rekap_bulanan_pdf(rekap_data, filter_info, is_pusat=is_pusat, output_path=save_path)
 
-            log_activity(
-                actor.get("id"),
-                actor.get("username", "user"),
-                "CREATE",
-                "export_pdf",
-                filter_state.get("cabang_id") or 0,
-                f"Export PDF Rekap Bulanan ({bulan_nama} {tahun})",
-                filter_state.get("cabang_id"),
-            )
-            page.show_dialog(ft.SnackBar(ft.Text(f"PDF berhasil disimpan: {save_path}"), bgcolor=ft.Colors.GREEN_700))
+            if save_path:
+                log_activity(
+                    actor.get("id"),
+                    actor.get("username", "user"),
+                    "CREATE",
+                    "export_pdf",
+                    filter_state.get("cabang_id") or 0,
+                    f"Export PDF Rekap Bulanan ({bulan_nama} {tahun})",
+                    filter_state.get("cabang_id"),
+                )
+                page.show_dialog(ft.SnackBar(ft.Text(f"PDF berhasil disimpan: {save_path}"), bgcolor=ft.Colors.GREEN_700))
         except Exception as ex:
             page.show_dialog(ft.SnackBar(ft.Text(f"Gagal export PDF: {ex}"), bgcolor=ft.Colors.RED_400))
 
@@ -585,7 +621,7 @@ def build_view(page: ft.Page):
         content=ft.TabBar(
             tabs=[
                 ft.Tab(label="Ringkasan & Komposisi", icon=ft.Icons.ANALYTICS),
-                ft.Tab(label="Rincian Operasional Kenek/Supir", icon=ft.Icons.LOCAL_SHIPPING),
+                ft.Tab(label="Rincian Operasional Mobil", icon=ft.Icons.LOCAL_SHIPPING),
                 ft.Tab(label="Rincian Pengambilan Pabrik", icon=ft.Icons.FACTORY),
                 ft.Tab(label="Rincian Pengambilan Balaraja", icon=ft.Icons.WAREHOUSE),
             ]
@@ -596,7 +632,7 @@ def build_view(page: ft.Page):
         ft.Row([
             ft.Column([
                 ft.Text("Rekap Bulanan Gabungan", size=22, weight=ft.FontWeight.W_600),
-                ft.Text("Konsolidasi bulanan operasional kenek/supir, pengambilan pabrik, dan pengambilan Balaraja.", size=13, color=ft.Colors.GREY_500),
+                ft.Text("Konsolidasi bulanan operasional mobil (supir & kenek), pengambilan kas pabrik, dan pengambilan kas Balaraja.", size=13, color=ft.Colors.GREY_500),
             ], expand=True),
             ft.OutlinedButton(
                 "Export ke PDF",
@@ -625,3 +661,4 @@ def build_view(page: ft.Page):
     ], scroll=ft.ScrollMode.AUTO, expand=True)
 
     return body
+

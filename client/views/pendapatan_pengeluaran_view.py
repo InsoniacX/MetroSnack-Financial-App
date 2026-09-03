@@ -344,7 +344,7 @@ def build_view(page: ft.Page):
             jenis_color = ft.Colors.GREEN_700 if is_pendapatan else ft.Colors.RED_700
             jenis_dark_color = ft.Colors.GREEN_400 if is_pendapatan else ft.Colors.RED_400
             jenis_bg = ft.Colors.GREEN_50 if is_pendapatan else ft.Colors.RED_50
-            jenis_dark_bg = ft.Colors.GREEN_900 if is_pendapatan else ft.Colors.RED_900
+            jenis_dark_bg = ft.Colors.GREEN_800 if is_pendapatan else ft.Colors.RED_800
 
             tgl_str = it["tanggal"].strftime("%d-%m-%Y") if hasattr(it["tanggal"], "strftime") else str(it["tanggal"])
             nom_prefix = "+ " if is_pendapatan else "- "
@@ -362,14 +362,15 @@ def build_view(page: ft.Page):
                         content=ft.Text(
                             it["jenis"],
                             size=11,
-                            weight=ft.FontWeight.W_500,
-                            color=jenis_dark_color if is_dark else jenis_color,
+                            weight=ft.FontWeight.W_600,
+                            color=ft.Colors.WHITE if is_dark else jenis_color,
                         ),
                         bgcolor=jenis_dark_bg if is_dark else jenis_bg,
                         padding=ft.Padding.symmetric(vertical=4, horizontal=8),
                         border_radius=6,
                     )
                 ),
+
                 ft.DataCell(ft.Text(it["kategori"], size=13, weight=ft.FontWeight.W_500)),
                 ft.DataCell(ft.Text(it["keterangan"] or "-", size=13)),
                 ft.DataCell(

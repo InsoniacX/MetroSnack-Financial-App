@@ -507,6 +507,10 @@ def generate_pendapatan_pengeluaran_pdf(items, filter_info, is_pusat=False, outp
 # 3. PENGAMBILAN BALARAJA PDF EXPORT
 # =========================================================================
 
+# =========================================================================
+# 3. PENGAMBILAN BALARAJA PDF EXPORT
+# =========================================================================
+
 def generate_pengambilan_balaraja_pdf(items, filter_info, is_pusat=False, output_path=None):
     """
     items: list of dict -> hasil dari db.pengambilan_balaraja_repo.get_pengambilan_balaraja()
@@ -523,29 +527,29 @@ def generate_pengambilan_balaraja_pdf(items, filter_info, is_pusat=False, output
         rightMargin=1.2 * cm,
     )
 
-    elements = _build_header_elements("Laporan Pengambilan Barang Balaraja", filter_info, is_landscape=True)
+    elements = _build_header_elements("Laporan Pengambilan Kas Balaraja", filter_info, is_landscape=True)
 
     # Metrik
-    total_nominal = sum([it.get("total_harga", 0) for it in items])
-    total_qty = sum([it.get("qty", 0) for it in items])
+    total_nominal = sum([it.get("nominal", 0) for it in items])
     count_trx = len(items)
     avg_per_trx = (total_nominal / count_trx) if count_trx > 0 else 0
+    max_trx = max([it.get("nominal", 0) for it in items], default=0)
 
     kpi_cards = [
-        ("Total Biaya Pengambilan", rp(total_nominal), "#E65100", "#FFF3E0"),
-        ("Total Volume / Qty", f"{total_qty:,.0f} Item", "#0277BD", "#E1F5FE"),
+        ("Total Pengambilan Balaraja", rp(total_nominal), "#E65100", "#FFF3E0"),
+        ("Jumlah Transaksi", f"{count_trx} Transaksi", "#0277BD", "#E1F5FE"),
         ("Rata-Rata per Transaksi", rp(avg_per_trx), "#455A64", "#ECEFF1"),
-        ("Jumlah Transaksi", f"{count_trx} Transaksi", "#37474F", "#ECEFF1"),
+        ("Transaksi Terbesar", rp(max_trx), "#37474F", "#ECEFF1"),
     ]
     elements.append(_build_kpi_table(kpi_cards, total_width_cm=27.3))
     elements.append(Spacer(1, 10))
 
     if is_pusat:
-        headers = ["No", "Tanggal", "Cabang", "Lokasi Gudang", "Nama Barang & Kategori", "Qty", "Harga Satuan", "Total Harga", "No. SJ", "Driver / Armada"]
-        col_widths = [0.9 * cm, 2.2 * cm, 2.6 * cm, 3.2 * cm, 4.8 * cm, 2.0 * cm, 2.6 * cm, 3.0 * cm, 2.8 * cm, 3.2 * cm]
+        headers = ["No", "Tanggal", "Cabang", "Keterangan / Rincian Kas", "Nominal Kas (Rp)", "Diinput Oleh"]
+        col_widths = [1.2 * cm, 3.2 * cm, 4.2 * cm, 11.2 * cm, 4.2 * cm, 3.3 * cm]
     else:
-        headers = ["No", "Tanggal", "Lokasi Gudang", "Nama Barang & Kategori", "Qty", "Harga Satuan", "Total Harga", "No. SJ", "Driver / Armada"]
-        col_widths = [1.0 * cm, 2.3 * cm, 3.6 * cm, 5.4 * cm, 2.2 * cm, 2.8 * cm, 3.2 * cm, 3.2 * cm, 3.6 * cm]
+        headers = ["No", "Tanggal", "Keterangan / Rincian Kas", "Nominal Kas (Rp)", "Diinput Oleh"]
+        col_widths = [1.2 * cm, 3.8 * cm, 13.8 * cm, 4.8 * cm, 3.7 * cm]
 
     header_row = [Paragraph(f"<b>{h}</b>", _style_th) for h in headers]
     data = [header_row]
@@ -564,45 +568,31 @@ def generate_pengambilan_balaraja_pdf(items, filter_info, is_pusat=False, output
         bg_row = colors.HexColor("#FFF8E1" if idx % 2 == 0 else "#FFFFFF")
         table_style.append(("BACKGROUND", (0, idx), (-1, idx), bg_row))
 
-        barang_info = f"<b>{it.get('nama_barang', '-')}</b><br/><font size='6.5' color='#78909C'>{it.get('kategori_barang', '-')}</font>"
-        qty_str = f"{it.get('qty', 0):,.0f} {it.get('satuan', '')}"
-
         if is_pusat:
             row = [
                 Paragraph(str(idx), _style_cell_center),
                 Paragraph(tgl_str, _style_cell_center),
                 Paragraph(it.get("nama_cabang", "-"), _style_cell_left),
-                Paragraph(it.get("lokasi_gudang", "-"), _style_cell_left),
-                Paragraph(barang_info, _style_cell_left),
-                Paragraph(qty_str, _style_cell_center),
-                Paragraph(rp(it.get("harga_satuan", 0)), _style_cell_right),
-                Paragraph(f"<b>{rp(it.get('total_harga', 0))}</b>", _style_cell_right),
-                Paragraph(it.get("no_surat_jalan", "-") or "-", _style_cell_center),
-                Paragraph(it.get("driver", "-") or "-", _style_cell_left),
+                Paragraph(it.get("keterangan", "-") or "-", _style_cell_left),
+                Paragraph(f"<b>{rp(it.get('nominal', 0))}</b>", _style_cell_right),
+                Paragraph(it.get("username", "-") or "-", _style_cell_center),
             ]
         else:
             row = [
                 Paragraph(str(idx), _style_cell_center),
                 Paragraph(tgl_str, _style_cell_center),
-                Paragraph(it.get("lokasi_gudang", "-"), _style_cell_left),
-                Paragraph(barang_info, _style_cell_left),
-                Paragraph(qty_str, _style_cell_center),
-                Paragraph(rp(it.get("harga_satuan", 0)), _style_cell_right),
-                Paragraph(f"<b>{rp(it.get('total_harga', 0))}</b>", _style_cell_right),
-                Paragraph(it.get("no_surat_jalan", "-") or "-", _style_cell_center),
-                Paragraph(it.get("driver", "-") or "-", _style_cell_left),
+                Paragraph(it.get("keterangan", "-") or "-", _style_cell_left),
+                Paragraph(f"<b>{rp(it.get('nominal', 0))}</b>", _style_cell_right),
+                Paragraph(it.get("username", "-") or "-", _style_cell_center),
             ]
         data.append(row)
 
     # Footer Total
-    span_col = 4 if is_pusat else 3
+    span_col = 3 if is_pusat else 2
     footer_row = [
         Paragraph("<b>TOTAL KESELURUHAN</b>", _style_cell_bold_left),
     ] + [Paragraph("", _style_cell_left)] * span_col + [
-        Paragraph(f"<b>{total_qty:,.0f} Qty</b>", _style_cell_bold_center),
-        Paragraph("", _style_cell_left),
         Paragraph(f"<b>{rp(total_nominal)}</b>", _style_cell_bold_right),
-        Paragraph("", _style_cell_left),
         Paragraph("", _style_cell_left),
     ]
     data.append(footer_row)
@@ -643,29 +633,29 @@ def generate_pengambilan_pabrik_pdf(items, filter_info, is_pusat=False, output_p
         rightMargin=1.2 * cm,
     )
 
-    elements = _build_header_elements("Laporan Pengambilan Barang Pabrik", filter_info, is_landscape=True)
+    elements = _build_header_elements("Laporan Pengambilan Kas Pabrik", filter_info, is_landscape=True)
 
     # Metrik
-    total_nominal = sum([it.get("total_harga", 0) for it in items])
-    total_qty = sum([it.get("qty", 0) for it in items])
-    total_lunas = sum([it.get("total_harga", 0) for it in items if it.get("status_pembayaran") == "Lunas"])
-    total_tempo = sum([it.get("total_harga", 0) for it in items if it.get("status_pembayaran") != "Lunas"])
+    total_nominal = sum([it.get("nominal", 0) for it in items])
+    count_trx = len(items)
+    avg_per_trx = (total_nominal / count_trx) if count_trx > 0 else 0
+    max_trx = max([it.get("nominal", 0) for it in items], default=0)
 
     kpi_cards = [
-        ("Total Pembelian Pabrik", rp(total_nominal), "#1A237E", "#E8EAF6"),
-        ("Total Volume / Qty", f"{total_qty:,.0f} Item", "#00695C", "#E0F2F1"),
-        ("Status Lunas", rp(total_lunas), "#2E7D32", "#E8F5E9"),
-        ("Status Hutang / Tempo", rp(total_tempo), "#C62828", "#FFEBEE"),
+        ("Total Pengambilan Pabrik", rp(total_nominal), "#1A237E", "#E8EAF6"),
+        ("Jumlah Transaksi", f"{count_trx} Transaksi", "#00695C", "#E0F2F1"),
+        ("Rata-Rata per Transaksi", rp(avg_per_trx), "#455A64", "#ECEFF1"),
+        ("Transaksi Terbesar", rp(max_trx), "#2E7D32", "#E8F5E9"),
     ]
     elements.append(_build_kpi_table(kpi_cards, total_width_cm=27.3))
     elements.append(Spacer(1, 10))
 
     if is_pusat:
-        headers = ["No", "Tanggal", "Cabang", "Pabrik / Supplier", "Nama Barang & Kategori", "Qty", "Harga Satuan", "Total Harga", "No. DO/SJ", "Status Bayar"]
-        col_widths = [0.9 * cm, 2.2 * cm, 2.6 * cm, 3.6 * cm, 4.8 * cm, 2.0 * cm, 2.6 * cm, 3.0 * cm, 2.8 * cm, 2.8 * cm]
+        headers = ["No", "Tanggal", "Cabang", "Keterangan / Rincian Kas", "Nominal Kas (Rp)", "Diinput Oleh"]
+        col_widths = [1.2 * cm, 3.2 * cm, 4.2 * cm, 11.2 * cm, 4.2 * cm, 3.3 * cm]
     else:
-        headers = ["No", "Tanggal", "Pabrik / Supplier", "Nama Barang & Kategori", "Qty", "Harga Satuan", "Total Harga", "No. DO/SJ", "Status Bayar"]
-        col_widths = [1.0 * cm, 2.4 * cm, 4.0 * cm, 5.4 * cm, 2.2 * cm, 2.8 * cm, 3.2 * cm, 3.1 * cm, 3.2 * cm]
+        headers = ["No", "Tanggal", "Keterangan / Rincian Kas", "Nominal Kas (Rp)", "Diinput Oleh"]
+        col_widths = [1.2 * cm, 3.8 * cm, 13.8 * cm, 4.8 * cm, 3.7 * cm]
 
     header_row = [Paragraph(f"<b>{h}</b>", _style_th) for h in headers]
     data = [header_row]
@@ -684,47 +674,31 @@ def generate_pengambilan_pabrik_pdf(items, filter_info, is_pusat=False, output_p
         bg_row = colors.HexColor("#E8EAF6" if idx % 2 == 0 else "#FFFFFF")
         table_style.append(("BACKGROUND", (0, idx), (-1, idx), bg_row))
 
-        barang_info = f"<b>{it.get('nama_barang', '-')}</b><br/><font size='6.5' color='#78909C'>{it.get('kategori_barang', '-')}</font>"
-        qty_str = f"{it.get('qty', 0):,.0f} {it.get('satuan', '')}"
-        st_bayar = it.get("status_pembayaran", "Lunas")
-        st_color = "#2E7D32" if st_bayar == "Lunas" else "#C62828"
-
         if is_pusat:
             row = [
                 Paragraph(str(idx), _style_cell_center),
                 Paragraph(tgl_str, _style_cell_center),
                 Paragraph(it.get("nama_cabang", "-"), _style_cell_left),
-                Paragraph(it.get("nama_pabrik", "-"), _style_cell_left),
-                Paragraph(barang_info, _style_cell_left),
-                Paragraph(qty_str, _style_cell_center),
-                Paragraph(rp(it.get("harga_satuan", 0)), _style_cell_right),
-                Paragraph(f"<b>{rp(it.get('total_harga', 0))}</b>", _style_cell_right),
-                Paragraph(it.get("no_surat_jalan", "-") or "-", _style_cell_center),
-                Paragraph(f"<font color='{st_color}'><b>{st_bayar}</b></font>", _style_cell_center),
+                Paragraph(it.get("keterangan", "-") or "-", _style_cell_left),
+                Paragraph(f"<b>{rp(it.get('nominal', 0))}</b>", _style_cell_right),
+                Paragraph(it.get("username", "-") or "-", _style_cell_center),
             ]
         else:
             row = [
                 Paragraph(str(idx), _style_cell_center),
                 Paragraph(tgl_str, _style_cell_center),
-                Paragraph(it.get("nama_pabrik", "-"), _style_cell_left),
-                Paragraph(barang_info, _style_cell_left),
-                Paragraph(qty_str, _style_cell_center),
-                Paragraph(rp(it.get("harga_satuan", 0)), _style_cell_right),
-                Paragraph(f"<b>{rp(it.get('total_harga', 0))}</b>", _style_cell_right),
-                Paragraph(it.get("no_surat_jalan", "-") or "-", _style_cell_center),
-                Paragraph(f"<font color='{st_color}'><b>{st_bayar}</b></font>", _style_cell_center),
+                Paragraph(it.get("keterangan", "-") or "-", _style_cell_left),
+                Paragraph(f"<b>{rp(it.get('nominal', 0))}</b>", _style_cell_right),
+                Paragraph(it.get("username", "-") or "-", _style_cell_center),
             ]
         data.append(row)
 
     # Footer Total
-    span_col = 4 if is_pusat else 3
+    span_col = 3 if is_pusat else 2
     footer_row = [
         Paragraph("<b>TOTAL KESELURUHAN</b>", _style_cell_bold_left),
     ] + [Paragraph("", _style_cell_left)] * span_col + [
-        Paragraph(f"<b>{total_qty:,.0f} Qty</b>", _style_cell_bold_center),
-        Paragraph("", _style_cell_left),
         Paragraph(f"<b>{rp(total_nominal)}</b>", _style_cell_bold_right),
-        Paragraph("", _style_cell_left),
         Paragraph("", _style_cell_left),
     ]
     data.append(footer_row)
@@ -746,7 +720,7 @@ def generate_pengambilan_pabrik_pdf(items, filter_info, is_pusat=False, output_p
 
 
 # =========================================================================
-# 5. OPERASIONAL SUPIR & KENEK PDF EXPORT
+# 5. OPERASIONAL SUPIR & KENEK (OPERASIONAL MOBIL) PDF EXPORT
 # =========================================================================
 
 def generate_supir_kenek_pdf(items, filter_info, is_pusat=False, output_path=None):
@@ -765,33 +739,29 @@ def generate_supir_kenek_pdf(items, filter_info, is_pusat=False, output_path=Non
         rightMargin=1.2 * cm,
     )
 
-    elements = _build_header_elements("Laporan Operasional Supir & Kenek", filter_info, is_landscape=True)
+    elements = _build_header_elements("Laporan Operasional Mobil (Supir & Kenek)", filter_info, is_landscape=True)
 
     # Metrik
     total_nominal = sum([it.get("nominal", 0) for it in items])
-    total_jalan = sum([it.get("nominal", 0) for it in items if "jalan" in str(it.get("kategori_biaya", "")).lower()])
-    total_bbm = sum([
-        it.get("nominal", 0)
-        for it in items
-        if "bbm" in str(it.get("kategori_biaya", "")).lower() or "bensin" in str(it.get("kategori_biaya", "")).lower() or "tol" in str(it.get("kategori_biaya", "")).lower()
-    ])
     count_trx = len(items)
+    avg_per_trip = (total_nominal / count_trx) if count_trx > 0 else 0
+    max_trip = max([it.get("nominal", 0) for it in items], default=0)
 
     kpi_cards = [
-        ("Total Operasional", rp(total_nominal), "#37474F", "#ECEFF1"),
-        ("Total Uang Jalan", rp(total_jalan), "#1565C0", "#E3F2FD"),
-        ("Total BBM & Tol", rp(total_bbm), "#E65100", "#FFF3E0"),
-        ("Jumlah Transaksi", f"{count_trx} Transaksi", "#00695C", "#E0F2F1"),
+        ("Total Uang Jalan Mobil", rp(total_nominal), "#37474F", "#ECEFF1"),
+        ("Total Perjalanan (Trip)", f"{count_trx} Trip", "#1565C0", "#E3F2FD"),
+        ("Rata-Rata per Perjalanan", rp(avg_per_trip), "#E65100", "#FFF3E0"),
+        ("Uang Jalan Terbesar", rp(max_trip), "#00695C", "#E0F2F1"),
     ]
     elements.append(_build_kpi_table(kpi_cards, total_width_cm=27.3))
     elements.append(Spacer(1, 10))
 
     if is_pusat:
-        headers = ["No", "Tanggal", "Cabang", "Supir / Kenek", "Kategori Biaya", "Keterangan / Rute", "No. Bukti / Nota", "Nominal (Rp)"]
-        col_widths = [0.9 * cm, 2.2 * cm, 2.8 * cm, 3.8 * cm, 3.4 * cm, 7.8 * cm, 3.2 * cm, 3.2 * cm]
+        headers = ["No", "Tanggal", "Cabang", "Supir", "Kenek", "Keterangan / Rute", "Uang Jalan (Rp)", "Diinput Oleh"]
+        col_widths = [1.0 * cm, 2.5 * cm, 3.2 * cm, 3.8 * cm, 3.8 * cm, 6.8 * cm, 3.4 * cm, 2.8 * cm]
     else:
-        headers = ["No", "Tanggal", "Supir / Kenek", "Kategori Biaya", "Keterangan / Rute", "No. Bukti / Nota", "Nominal (Rp)"]
-        col_widths = [1.0 * cm, 2.4 * cm, 4.4 * cm, 3.8 * cm, 8.8 * cm, 3.4 * cm, 3.5 * cm]
+        headers = ["No", "Tanggal", "Supir", "Kenek", "Keterangan / Rute", "Uang Jalan (Rp)", "Diinput Oleh"]
+        col_widths = [1.0 * cm, 2.8 * cm, 4.4 * cm, 4.4 * cm, 7.8 * cm, 3.8 * cm, 3.1 * cm]
 
     header_row = [Paragraph(f"<b>{h}</b>", _style_th) for h in headers]
     data = [header_row]
@@ -810,38 +780,36 @@ def generate_supir_kenek_pdf(items, filter_info, is_pusat=False, output_path=Non
         bg_row = colors.HexColor("#F5F5F5" if idx % 2 == 0 else "#FFFFFF")
         table_style.append(("BACKGROUND", (0, idx), (-1, idx), bg_row))
 
-        personel_info = f"<b>{it.get('nama_personel', '-')}</b> <font size='6.5' color='#78909C'>({it.get('peran', 'Supir')})</font>"
-
         if is_pusat:
             row = [
                 Paragraph(str(idx), _style_cell_center),
                 Paragraph(tgl_str, _style_cell_center),
                 Paragraph(it.get("nama_cabang", "-"), _style_cell_left),
-                Paragraph(personel_info, _style_cell_left),
-                Paragraph(it.get("kategori_biaya", "-"), _style_cell_left),
+                Paragraph(it.get("supir_nama", "-") or "-", _style_cell_left),
+                Paragraph(it.get("kenek_nama", "-") or "-", _style_cell_left),
                 Paragraph(it.get("keterangan", "-") or "-", _style_cell_left),
-                Paragraph(it.get("nota", "-") or "-", _style_cell_center),
                 Paragraph(f"<b>{rp(it.get('nominal', 0))}</b>", _style_cell_right),
+                Paragraph(it.get("username", "-") or "-", _style_cell_center),
             ]
         else:
             row = [
                 Paragraph(str(idx), _style_cell_center),
                 Paragraph(tgl_str, _style_cell_center),
-                Paragraph(personel_info, _style_cell_left),
-                Paragraph(it.get("kategori_biaya", "-"), _style_cell_left),
+                Paragraph(it.get("supir_nama", "-") or "-", _style_cell_left),
+                Paragraph(it.get("kenek_nama", "-") or "-", _style_cell_left),
                 Paragraph(it.get("keterangan", "-") or "-", _style_cell_left),
-                Paragraph(it.get("nota", "-") or "-", _style_cell_center),
                 Paragraph(f"<b>{rp(it.get('nominal', 0))}</b>", _style_cell_right),
+                Paragraph(it.get("username", "-") or "-", _style_cell_center),
             ]
         data.append(row)
 
     # Footer Total
-    span_col = 6 if is_pusat else 5
+    span_col = 5 if is_pusat else 4
     footer_row = [
         Paragraph("<b>TOTAL OPERASIONAL</b>", _style_cell_bold_left),
-    ] + [Paragraph("", _style_cell_left)] * (span_col - 1) + [
-        Paragraph("", _style_cell_left),
+    ] + [Paragraph("", _style_cell_left)] * span_col + [
         Paragraph(f"<b>{rp(total_nominal)}</b>", _style_cell_bold_right),
+        Paragraph("", _style_cell_left),
     ]
     data.append(footer_row)
     last_row_idx = len(data) - 1
@@ -869,8 +837,8 @@ def generate_rekap_bulanan_pdf(rekap_data, filter_info, is_pusat=False, output_p
     """
     rekap_data: dict {
         "kenek": {"items": [...], "total": Decimal},
-        "pabrik": {"items": [...], "total": Decimal, "qty": float},
-        "balaraja": {"items": [...], "total": Decimal, "qty": float},
+        "pabrik": {"items": [...], "total": Decimal},
+        "balaraja": {"items": [...], "total": Decimal},
         "grand_total": Decimal
     }
     filter_info: dict {"periode": str, "cabang": str, "extra": str}
@@ -902,7 +870,7 @@ def generate_rekap_bulanan_pdf(rekap_data, filter_info, is_pusat=False, output_p
     pct_b = (float(balaraja_sum) / float(grand_sum) * 100) if grand_sum > 0 else 0
 
     kpi_cards = [
-        ("Operasional Kenek & Supir", f"{rp(kenek_sum)} ({pct_k:.1f}%)", "#C62828", "#FFEBEE"),
+        ("Operasional Mobil", f"{rp(kenek_sum)} ({pct_k:.1f}%)", "#C62828", "#FFEBEE"),
         ("Pengambilan Pabrik", f"{rp(pabrik_sum)} ({pct_p:.1f}%)", "#1A237E", "#E8EAF6"),
         ("Pengambilan Balaraja", f"{rp(balaraja_sum)} ({pct_b:.1f}%)", "#E65100", "#FFF3E0"),
         ("Grand Total Pengeluaran", rp(grand_sum), "#004D40", "#E0F2F1"),
@@ -914,15 +882,15 @@ def generate_rekap_bulanan_pdf(rekap_data, filter_info, is_pusat=False, output_p
     elements.append(Paragraph("<b>1. Ringkasan & Komposisi Pengeluaran Bulanan</b>", _style_section_heading))
     elements.append(Spacer(1, 3))
 
-    comp_headers = [Paragraph("<b>No</b>", _style_th), Paragraph("<b>Kategori / Sumber Pengeluaran</b>", _style_th), Paragraph("<b>Jumlah Transaksi</b>", _style_th), Paragraph("<b>Volume Qty</b>", _style_th), Paragraph("<b>Total Pengeluaran (Rp)</b>", _style_th), Paragraph("<b>Porsi (%)</b>", _style_th)]
+    comp_headers = [Paragraph("<b>No</b>", _style_th), Paragraph("<b>Kategori / Sumber Pengeluaran</b>", _style_th), Paragraph("<b>Jumlah Transaksi</b>", _style_th), Paragraph("<b>Total Pengeluaran (Rp)</b>", _style_th), Paragraph("<b>Porsi (%)</b>", _style_th)]
     comp_data = [
         comp_headers,
-        [Paragraph("1", _style_cell_center), Paragraph("Operasional Kenek & Supir (Uang Jalan, BBM, Tol, dll)", _style_cell_left), Paragraph(f"{len(kenek_info.get('items', []))} Trx", _style_cell_center), Paragraph("-", _style_cell_center), Paragraph(f"<b>{rp(kenek_sum)}</b>", _style_cell_right), Paragraph(f"<b>{pct_k:.1f}%</b>", _style_cell_center)],
-        [Paragraph("2", _style_cell_center), Paragraph("Pengambilan Barang Pabrik / Supplier", _style_cell_left), Paragraph(f"{len(pabrik_info.get('items', []))} Trx", _style_cell_center), Paragraph(f"{pabrik_info.get('qty', 0):,.0f} Item", _style_cell_center), Paragraph(f"<b>{rp(pabrik_sum)}</b>", _style_cell_right), Paragraph(f"<b>{pct_p:.1f}%</b>", _style_cell_center)],
-        [Paragraph("3", _style_cell_center), Paragraph("Pengambilan Barang Gudang / Depo Balaraja", _style_cell_left), Paragraph(f"{len(balaraja_info.get('items', []))} Trx", _style_cell_center), Paragraph(f"{balaraja_info.get('qty', 0):,.0f} Item", _style_cell_center), Paragraph(f"<b>{rp(balaraja_sum)}</b>", _style_cell_right), Paragraph(f"<b>{pct_b:.1f}%</b>", _style_cell_center)],
-        [Paragraph("<b>TOTAL GABUNGAN</b>", _style_cell_bold_left), Paragraph("", _style_cell_left), Paragraph(f"<b>{len(kenek_info.get('items', [])) + len(pabrik_info.get('items', [])) + len(balaraja_info.get('items', []))} Trx</b>", _style_cell_bold_center), Paragraph(f"<b>{pabrik_info.get('qty', 0) + balaraja_info.get('qty', 0):,.0f} Item</b>", _style_cell_bold_center), Paragraph(f"<b>{rp(grand_sum)}</b>", _style_cell_bold_right), Paragraph("<b>100.0%</b>", _style_cell_bold_center)],
+        [Paragraph("1", _style_cell_center), Paragraph("Operasional Mobil (Uang Jalan Supir & Kenek)", _style_cell_left), Paragraph(f"{len(kenek_info.get('items', []))} Perjalanan", _style_cell_center), Paragraph(f"<b>{rp(kenek_sum)}</b>", _style_cell_right), Paragraph(f"<b>{pct_k:.1f}%</b>", _style_cell_center)],
+        [Paragraph("2", _style_cell_center), Paragraph("Pengambilan Kas Pabrik / Supplier", _style_cell_left), Paragraph(f"{len(pabrik_info.get('items', []))} Transaksi", _style_cell_center), Paragraph(f"<b>{rp(pabrik_sum)}</b>", _style_cell_right), Paragraph(f"<b>{pct_p:.1f}%</b>", _style_cell_center)],
+        [Paragraph("3", _style_cell_center), Paragraph("Pengambilan Kas Gudang / Depo Balaraja", _style_cell_left), Paragraph(f"{len(balaraja_info.get('items', []))} Transaksi", _style_cell_center), Paragraph(f"<b>{rp(balaraja_sum)}</b>", _style_cell_right), Paragraph(f"<b>{pct_b:.1f}%</b>", _style_cell_center)],
+        [Paragraph("<b>TOTAL GABUNGAN</b>", _style_cell_bold_left), Paragraph("", _style_cell_left), Paragraph(f"<b>{len(kenek_info.get('items', [])) + len(pabrik_info.get('items', [])) + len(balaraja_info.get('items', []))} Transaksi</b>", _style_cell_bold_center), Paragraph(f"<b>{rp(grand_sum)}</b>", _style_cell_bold_right), Paragraph("<b>100.0%</b>", _style_cell_bold_center)],
     ]
-    comp_widths = [1.2 * cm, 10.1 * cm, 4.0 * cm, 3.5 * cm, 5.5 * cm, 3.0 * cm]
+    comp_widths = [1.2 * cm, 11.6 * cm, 5.0 * cm, 6.0 * cm, 3.5 * cm]
     comp_table = Table(comp_data, colWidths=comp_widths)
     comp_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0D47A1")),
@@ -937,24 +905,24 @@ def generate_rekap_bulanan_pdf(rekap_data, filter_info, is_pusat=False, output_p
     elements.append(Spacer(1, 14))
 
     # Section 2: Detail Operasional Kenek & Supir
-    elements.append(Paragraph(f"<b>2. Rincian Pengeluaran Operasional Kenek & Supir ({rp(kenek_sum)})</b>", _style_section_heading))
+    elements.append(Paragraph(f"<b>2. Rincian Operasional Mobil / Supir & Kenek ({rp(kenek_sum)})</b>", _style_section_heading))
     elements.append(Spacer(1, 3))
     k_items = kenek_info.get("items", [])
     if not k_items:
-        elements.append(Paragraph("Tidak ada catatan pengeluaran kenek/supir pada periode ini.", _style_subtitle))
+        elements.append(Paragraph("Tidak ada catatan operasional mobil pada periode ini.", _style_subtitle))
     else:
-        k_headers = ["No", "Tanggal", "Supir / Kenek", "Kategori Biaya", "Keterangan", "Nota", "Nominal"]
-        k_widths = [1.0 * cm, 2.5 * cm, 4.8 * cm, 4.2 * cm, 9.0 * cm, 2.8 * cm, 3.0 * cm]
+        k_headers = ["No", "Tanggal", "Supir", "Kenek", "Keterangan / Rute", "Uang Jalan (Rp)", "Diinput Oleh"]
+        k_widths = [1.0 * cm, 2.8 * cm, 4.4 * cm, 4.4 * cm, 7.8 * cm, 3.8 * cm, 3.1 * cm]
         k_data = [[Paragraph(f"<b>{h}</b>", _style_th) for h in k_headers]]
         for idx, it in enumerate(k_items, start=1):
             k_data.append([
                 Paragraph(str(idx), _style_cell_center),
                 Paragraph(_format_date_val(it.get("tanggal")), _style_cell_center),
-                Paragraph(f"<b>{it.get('nama_personel', '-')}</b> ({it.get('peran', 'Supir')})", _style_cell_left),
-                Paragraph(it.get("kategori_biaya", "-"), _style_cell_left),
+                Paragraph(it.get("supir_nama", "-") or "-", _style_cell_left),
+                Paragraph(it.get("kenek_nama", "-") or "-", _style_cell_left),
                 Paragraph(it.get("keterangan", "-") or "-", _style_cell_left),
-                Paragraph(it.get("nota", "-") or "-", _style_cell_center),
                 Paragraph(rp(it.get("nominal", 0)), _style_cell_right),
+                Paragraph(it.get("username", "-") or "-", _style_cell_center),
             ])
         k_table = Table(k_data, colWidths=k_widths, repeatRows=1)
         k_table.setStyle(TableStyle([
@@ -969,26 +937,22 @@ def generate_rekap_bulanan_pdf(rekap_data, filter_info, is_pusat=False, output_p
     elements.append(Spacer(1, 14))
 
     # Section 3: Detail Pengambilan Pabrik
-    elements.append(Paragraph(f"<b>3. Rincian Pengambilan Barang Pabrik ({rp(pabrik_sum)})</b>", _style_section_heading))
+    elements.append(Paragraph(f"<b>3. Rincian Pengambilan Kas Pabrik ({rp(pabrik_sum)})</b>", _style_section_heading))
     elements.append(Spacer(1, 3))
     p_items = pabrik_info.get("items", [])
     if not p_items:
-        elements.append(Paragraph("Tidak ada catatan pengambilan pabrik pada periode ini.", _style_subtitle))
+        elements.append(Paragraph("Tidak ada catatan pengambilan kas pabrik pada periode ini.", _style_subtitle))
     else:
-        p_headers = ["No", "Tanggal", "Pabrik / Supplier", "Nama Barang", "Qty & Satuan", "Harga Satuan", "Total Harga", "No. DO/SJ", "Status"]
-        p_widths = [1.0 * cm, 2.4 * cm, 4.2 * cm, 5.5 * cm, 2.6 * cm, 2.8 * cm, 3.2 * cm, 2.8 * cm, 2.8 * cm]
+        p_headers = ["No", "Tanggal", "Keterangan / Rincian Kas", "Nominal Kas (Rp)", "Diinput Oleh"]
+        p_widths = [1.2 * cm, 3.8 * cm, 13.8 * cm, 4.8 * cm, 3.7 * cm]
         p_data = [[Paragraph(f"<b>{h}</b>", _style_th) for h in p_headers]]
         for idx, it in enumerate(p_items, start=1):
             p_data.append([
                 Paragraph(str(idx), _style_cell_center),
                 Paragraph(_format_date_val(it.get("tanggal")), _style_cell_center),
-                Paragraph(it.get("nama_pabrik", "-"), _style_cell_left),
-                Paragraph(it.get("nama_barang", "-"), _style_cell_left),
-                Paragraph(f"{it.get('qty', 0):,.0f} {it.get('satuan', '')}", _style_cell_center),
-                Paragraph(rp(it.get("harga_satuan", 0)), _style_cell_right),
-                Paragraph(f"<b>{rp(it.get('total_harga', 0))}</b>", _style_cell_right),
-                Paragraph(it.get("no_surat_jalan", "-") or "-", _style_cell_center),
-                Paragraph(it.get("status_pembayaran", "Lunas"), _style_cell_center),
+                Paragraph(it.get("keterangan", "-") or "-", _style_cell_left),
+                Paragraph(rp(it.get("nominal", 0)), _style_cell_right),
+                Paragraph(it.get("username", "-") or "-", _style_cell_center),
             ])
         p_table = Table(p_data, colWidths=p_widths, repeatRows=1)
         p_table.setStyle(TableStyle([
@@ -1003,26 +967,22 @@ def generate_rekap_bulanan_pdf(rekap_data, filter_info, is_pusat=False, output_p
     elements.append(Spacer(1, 14))
 
     # Section 4: Detail Pengambilan Balaraja
-    elements.append(Paragraph(f"<b>4. Rincian Pengambilan Barang Balaraja ({rp(balaraja_sum)})</b>", _style_section_heading))
+    elements.append(Paragraph(f"<b>4. Rincian Pengambilan Kas Balaraja ({rp(balaraja_sum)})</b>", _style_section_heading))
     elements.append(Spacer(1, 3))
     b_items = balaraja_info.get("items", [])
     if not b_items:
-        elements.append(Paragraph("Tidak ada catatan pengambilan Balaraja pada periode ini.", _style_subtitle))
+        elements.append(Paragraph("Tidak ada catatan pengambilan kas Balaraja pada periode ini.", _style_subtitle))
     else:
-        b_headers = ["No", "Tanggal", "Lokasi Gudang", "Nama Barang", "Qty & Satuan", "Harga Satuan", "Total Harga", "No. SJ", "Driver / Armada"]
-        b_widths = [1.0 * cm, 2.4 * cm, 4.0 * cm, 5.5 * cm, 2.6 * cm, 2.8 * cm, 3.2 * cm, 2.8 * cm, 3.0 * cm]
+        b_headers = ["No", "Tanggal", "Keterangan / Rincian Kas", "Nominal Kas (Rp)", "Diinput Oleh"]
+        b_widths = [1.2 * cm, 3.8 * cm, 13.8 * cm, 4.8 * cm, 3.7 * cm]
         b_data = [[Paragraph(f"<b>{h}</b>", _style_th) for h in b_headers]]
         for idx, it in enumerate(b_items, start=1):
             b_data.append([
                 Paragraph(str(idx), _style_cell_center),
                 Paragraph(_format_date_val(it.get("tanggal")), _style_cell_center),
-                Paragraph(it.get("lokasi_gudang", "-"), _style_cell_left),
-                Paragraph(it.get("nama_barang", "-"), _style_cell_left),
-                Paragraph(f"{it.get('qty', 0):,.0f} {it.get('satuan', '')}", _style_cell_center),
-                Paragraph(rp(it.get("harga_satuan", 0)), _style_cell_right),
-                Paragraph(f"<b>{rp(it.get('total_harga', 0))}</b>", _style_cell_right),
-                Paragraph(it.get("no_surat_jalan", "-") or "-", _style_cell_center),
-                Paragraph(it.get("driver", "-") or "-", _style_cell_left),
+                Paragraph(it.get("keterangan", "-") or "-", _style_cell_left),
+                Paragraph(rp(it.get("nominal", 0)), _style_cell_right),
+                Paragraph(it.get("username", "-") or "-", _style_cell_center),
             ])
         b_table = Table(b_data, colWidths=b_widths, repeatRows=1)
         b_table.setStyle(TableStyle([
@@ -1037,3 +997,4 @@ def generate_rekap_bulanan_pdf(rekap_data, filter_info, is_pusat=False, output_p
     doc.build(elements)
     if output_path is None:
         return buffer.getvalue()
+

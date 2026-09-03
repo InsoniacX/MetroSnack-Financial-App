@@ -1,130 +1,104 @@
-import json
-import os
 from decimal import Decimal
 from datetime import datetime, date
-
-MOCK_FILE = os.path.join(os.path.dirname(__file__), "mock_supir_kenek.json")
-
-KATEGORI_BIAYA_KENEK = [
-    "Uang Jalan / Saku",
-    "BBM / Bensin",
-    "Tol & Parkir",
-    "Makan & Minum",
-    "Bongkar Muat",
-    "Lembur / Bonus Trip",
-    "Perbaikan Darurat",
-    "Lain-lain",
-]
-
-PERAN_OPTIONS = ["Supir", "Kenek", "Supir & Kenek"]
+from .http_client import api_get, api_post, api_put, api_patch, api_delete, ApiError
+from ._convert import to_date, to_datetime, to_decimal
+from .cabang_repo import get_active_cabang
 
 
-def _load_raw():
-    if not os.path.exists(MOCK_FILE):
-        return {"personel": [], "pengeluaran": []}
+def _iso(value):
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+# =========================================================================
+# PERSONEL MASTER CRUD (/supir-kenek)
+# =========================================================================
+def get_personel_list(cabang_id=None, active_only=False, search=None):
+    """
+    Mengambil daftar master Supir & Kenek dari backend API.
+    Jika cabang_id None (Pusat), query digabungkan untuk semua cabang aktif.
+    """
+    cabang_name_map = {}
     try:
-        with open(MOCK_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                return {"personel": [], "pengeluaran": data}
-            return data
+        active_cabangs = get_active_cabang()
+        cabang_name_map = {c[0]: c[1] for c in active_cabangs}
     except Exception:
-        return {"personel": [], "pengeluaran": []}
+        pass
 
+    raw_rows = []
+    if cabang_id is not None:
+        params = {"cabang_id": cabang_id, "active_only": bool(active_only)}
+        try:
+            resp = api_get("/supir-kenek", params=params)
+            if resp:
+                raw_rows.extend(resp)
+        except ApiError as e:
+            raise e
+    else:
+        if not cabang_name_map:
+            return []
+        for cid in cabang_name_map.keys():
+            params = {"cabang_id": cid, "active_only": bool(active_only)}
+            try:
+                resp = api_get("/supir-kenek", params=params)
+                if resp:
+                    raw_rows.extend(resp)
+            except ApiError:
+                continue
 
-def _save_raw(data):
-    try:
-        with open(MOCK_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-    except Exception as ex:
-        print(f"Error saving supir kenek mock: {ex}")
-
-
-# =========================================================================
-# PERSONEL MASTER CRUD
-# =========================================================================
-def get_personel_list(cabang_id=None, status=None, search=None):
-    raw = _load_raw()
-    items = raw.get("personel", [])
     results = []
-    for it in items:
-        if cabang_id is not None and it.get("cabang_id") != cabang_id:
-            continue
-        if status and status != "Semua" and it.get("status") != status:
-            continue
+    for r in raw_rows:
+        # Structure: [id, cabang_id, nama, aktif, created_at, updated_at]
+        pid, cid, nama, aktif, *rest = r
         if search:
             s = search.lower().strip()
-            nama = str(it.get("nama", "")).lower()
-            peran = str(it.get("peran", "")).lower()
-            armada = str(it.get("armada", "")).lower()
-            no_telp = str(it.get("no_telp", "")).lower()
-            if s not in nama and s not in peran and s not in armada and s not in no_telp:
+            if s not in str(nama).lower():
                 continue
         results.append({
-            "id": it.get("id"),
-            "nama": it.get("nama", ""),
-            "peran": it.get("peran", "Supir"),
-            "no_telp": it.get("no_telp", ""),
-            "armada": it.get("armada", ""),
-            "cabang_id": it.get("cabang_id", 1),
-            "nama_cabang": it.get("nama_cabang", "Cabang"),
-            "status": it.get("status", "Aktif"),
+            "id": pid,
+            "cabang_id": cid,
+            "nama_cabang": cabang_name_map.get(cid, f"Cabang {cid}"),
+            "nama": nama,
+            "aktif": bool(aktif),
+            "status": "Aktif" if aktif else "Nonaktif",
+            "created_at": to_datetime(rest[0]) if len(rest) > 0 else None,
+            "updated_at": to_datetime(rest[1]) if len(rest) > 1 else None,
         })
-    results.sort(key=lambda x: x["nama"].lower())
+
+    results.sort(key=lambda x: (not x["aktif"], x["nama"].lower()))
     return results
 
 
-def add_personel(nama, peran, no_telp="", armada="", cabang_id=1, nama_cabang="Cabang", status="Aktif"):
-    raw = _load_raw()
-    items = raw.setdefault("personel", [])
-    next_id = max([it.get("id", 0) for it in items], default=0) + 1
-    new_p = {
-        "id": next_id,
-        "nama": nama.strip(),
-        "peran": peran,
-        "no_telp": (no_telp or "").strip(),
-        "armada": (armada or "").strip(),
-        "cabang_id": cabang_id,
-        "nama_cabang": nama_cabang or "Cabang",
-        "status": status or "Aktif",
+def add_personel(nama, cabang_id=1):
+    """Menambahkan supir/kenek baru ke master data."""
+    body = {
+        "cabang_id": int(cabang_id),
+        "nama": str(nama).strip(),
     }
-    items.append(new_p)
-    _save_raw(raw)
-    return next_id
+    resp = api_post("/supir-kenek", json_body=body)
+    return resp.get("id") if resp else None
 
 
-def update_personel(personel_id, nama, peran, no_telp="", armada="", cabang_id=None, nama_cabang=None, status=None):
-    raw = _load_raw()
-    items = raw.setdefault("personel", [])
-    updated = False
-    for it in items:
-        if it.get("id") == personel_id:
-            it["nama"] = nama.strip()
-            it["peran"] = peran
-            it["no_telp"] = (no_telp or "").strip()
-            it["armada"] = (armada or "").strip()
-            if cabang_id is not None:
-                it["cabang_id"] = cabang_id
-            if nama_cabang is not None:
-                it["nama_cabang"] = nama_cabang
-            if status is not None:
-                it["status"] = status
-            updated = True
-            break
-    if updated:
-        _save_raw(raw)
-    return updated
+def update_personel(personel_id, nama):
+    """Mengubah nama supir/kenek."""
+    body = {
+        "nama": str(nama).strip(),
+    }
+    api_put(f"/supir-kenek/{personel_id}", json_body=body)
+    return True
 
 
-def delete_personel(personel_id):
-    raw = _load_raw()
-    raw["personel"] = [it for it in raw.get("personel", []) if it.get("id") != personel_id]
-    _save_raw(raw)
+def set_personel_aktif(personel_id, aktif):
+    """Mengubah status aktif/nonaktif supir/kenek."""
+    api_patch(f"/supir-kenek/{personel_id}/aktif", params={"aktif": bool(aktif)})
     return True
 
 
 # =========================================================================
-# PENGELUARAN OPERASIONAL CRUD
+# PENGELUARAN OPERASIONAL CRUD (/operasional-mobil)
 # =========================================================================
 def get_pengeluaran_supir_kenek(
     cabang_id=None,
@@ -132,170 +106,178 @@ def get_pengeluaran_supir_kenek(
     tahun=None,
     start_date=None,
     end_date=None,
+    supir_id=None,
+    kenek_id=None,
     personel_id=None,
-    kategori=None,
     search=None,
     sort_order="desc",
 ):
-    raw = _load_raw()
-    items = raw.get("pengeluaran", [])
-    filtered = []
+    """
+    Mengambil daftar catatan operasional mobil dari backend API.
+    """
+    cabang_name_map = {}
+    try:
+        active_cabangs = get_active_cabang()
+        cabang_name_map = {c[0]: c[1] for c in active_cabangs}
+    except Exception:
+        pass
 
-    for it in items:
-        tgl_str = it.get("tanggal", "")
+    raw_rows = []
+    if cabang_id is not None:
+        params = {"cabang_id": cabang_id, "limit": 500}
+        if start_date:
+            params["tanggal_awal"] = _iso(start_date)
+        if end_date:
+            params["tanggal_akhir"] = _iso(end_date)
         try:
-            tgl_dt = datetime.strptime(tgl_str, "%Y-%m-%d").date()
-        except Exception:
-            tgl_dt = None
+            resp = api_get("/operasional-mobil", params=params)
+            if resp:
+                raw_rows.extend(resp)
+        except ApiError as e:
+            raise e
+    else:
+        if not cabang_name_map:
+            return []
+        for cid in cabang_name_map.keys():
+            params = {"cabang_id": cid, "limit": 500}
+            if start_date:
+                params["tanggal_awal"] = _iso(start_date)
+            if end_date:
+                params["tanggal_akhir"] = _iso(end_date)
+            try:
+                resp = api_get("/operasional-mobil", params=params)
+                if resp:
+                    raw_rows.extend(resp)
+            except ApiError:
+                continue
 
-        if cabang_id is not None and it.get("cabang_id") != cabang_id:
-            continue
-        if personel_id is not None and it.get("personel_id") != personel_id:
-            continue
-        if kategori and kategori != "Semua" and it.get("kategori_biaya") != kategori:
-            continue
+    items = []
+    for r in raw_rows:
+        # Structure: [id, cabang_id, tanggal, supir_id, nama_supir, kenek_id, nama_kenek, uang_jalan, keterangan, user_id, username, created_at, updated_at]
+        oid, cid, tgl, sid, nama_supir, kid, nama_kenek, uang_jalan, ket, uid, username, *rest = r
+        tgl_dt = to_date(tgl)
 
         if bulan is not None and tgl_dt and tgl_dt.month != bulan:
             continue
         if tahun is not None and tgl_dt and tgl_dt.year != tahun:
             continue
-
-        if start_date and tgl_dt and tgl_dt < start_date:
+        if start_date and tgl_dt and tgl_dt < (to_date(start_date) if isinstance(start_date, str) else start_date):
             continue
-        if end_date and tgl_dt and tgl_dt > end_date:
+        if end_date and tgl_dt and tgl_dt > (to_date(end_date) if isinstance(end_date, str) else end_date):
+            continue
+
+        if supir_id is not None and sid != supir_id:
+            continue
+        if kenek_id is not None and kid != kenek_id:
+            continue
+        if personel_id is not None and sid != personel_id and kid != personel_id:
             continue
 
         if search:
             s = search.lower().strip()
-            ket = str(it.get("keterangan", "")).lower()
-            nota = str(it.get("nota", "")).lower()
-            nama = str(it.get("nama_personel", "")).lower()
-            kat = str(it.get("kategori_biaya", "")).lower()
-            if s not in ket and s not in nota and s not in nama and s not in kat:
+            ns = str(nama_supir or "").lower()
+            nk = str(nama_kenek or "").lower()
+            keterangan_str = str(ket or "").lower()
+            un = str(username or "").lower()
+            if s not in ns and s not in nk and s not in keterangan_str and s not in un:
                 continue
 
-        filtered.append({
-            "id": it.get("id"),
+        nominal_dec = to_decimal(uang_jalan)
+        items.append({
+            "id": oid,
+            "cabang_id": cid,
+            "nama_cabang": cabang_name_map.get(cid, f"Cabang {cid}"),
             "tanggal": tgl_dt if tgl_dt else date.today(),
-            "personel_id": it.get("personel_id"),
-            "nama_personel": it.get("nama_personel", "Supir/Kenek"),
-            "peran": it.get("peran", "Supir"),
-            "kategori_biaya": it.get("kategori_biaya", "Lain-lain"),
-            "nominal": Decimal(str(it.get("nominal", 0))),
-            "keterangan": it.get("keterangan", ""),
-            "nota": it.get("nota", ""),
-            "cabang_id": it.get("cabang_id", 1),
-            "nama_cabang": it.get("nama_cabang", "Cabang"),
+            "supir_id": sid,
+            "nama_supir": nama_supir or "Supir",
+            "nama_personel": nama_supir or "Supir",  # alias for backward compatibility
+            "kenek_id": kid,
+            "nama_kenek": nama_kenek or "-",
+            "peran": f"Supir: {nama_supir}" + (f", Kenek: {nama_kenek}" if nama_kenek else ""),
+            "uang_jalan": nominal_dec,
+            "nominal": nominal_dec,  # alias for backward compatibility / rekap
+            "keterangan": ket or "",
+            "kategori_biaya": "Uang Jalan",  # alias
+            "user_id": uid,
+            "username": username or "",
+            "created_at": to_datetime(rest[0]) if len(rest) > 0 else None,
+            "updated_at": to_datetime(rest[1]) if len(rest) > 1 else None,
         })
 
     is_desc = (sort_order or "desc").lower() == "desc"
-    filtered.sort(key=lambda x: (x["tanggal"], x["id"]), reverse=is_desc)
-    return filtered
+    items.sort(key=lambda x: (x["tanggal"], x["id"]), reverse=is_desc)
+    return items
 
 
 def add_pengeluaran_supir_kenek(
     tanggal,
-    personel_id,
-    nama_personel,
-    peran,
-    kategori_biaya,
-    nominal,
-    keterangan,
-    nota="",
+    supir_id,
+    kenek_id=None,
+    uang_jalan=0,
+    keterangan="",
     cabang_id=1,
-    nama_cabang="Cabang",
+    **kwargs,
 ):
-    raw = _load_raw()
-    items = raw.setdefault("pengeluaran", [])
-    next_id = max([it.get("id", 0) for it in items], default=0) + 1
-
-    tgl_str = tanggal.isoformat() if hasattr(tanggal, "isoformat") else str(tanggal)
-    new_item = {
-        "id": next_id,
-        "tanggal": tgl_str,
-        "personel_id": personel_id,
-        "nama_personel": nama_personel or "Supir/Kenek",
-        "peran": peran or "Supir",
-        "kategori_biaya": kategori_biaya or "Lain-lain",
-        "nominal": float(nominal),
-        "keterangan": keterangan or "",
-        "nota": (nota or "").strip(),
-        "cabang_id": cabang_id,
-        "nama_cabang": nama_cabang or "Cabang",
+    """Menambahkan catatan operasional mobil baru."""
+    body = {
+        "tanggal": _iso(tanggal),
+        "supir_id": int(supir_id),
+        "kenek_id": int(kenek_id) if kenek_id and int(kenek_id) > 0 else None,
+        "uang_jalan": float(uang_jalan),
+        "keterangan": (keterangan or "").strip() or None,
+        "cabang_id": int(cabang_id),
     }
-    items.append(new_item)
-    _save_raw(raw)
-    return next_id
+    resp = api_post("/operasional-mobil", json_body=body)
+    return resp.get("id") if resp else None
 
 
 def update_pengeluaran_supir_kenek(
     pengeluaran_id,
     tanggal,
-    personel_id,
-    nama_personel,
-    peran,
-    kategori_biaya,
-    nominal,
-    keterangan,
-    nota="",
-    cabang_id=None,
-    nama_cabang=None,
+    supir_id,
+    kenek_id=None,
+    uang_jalan=0,
+    keterangan="",
+    **kwargs,
 ):
-    raw = _load_raw()
-    items = raw.setdefault("pengeluaran", [])
-    tgl_str = tanggal.isoformat() if hasattr(tanggal, "isoformat") else str(tanggal)
-
-    updated = False
-    for it in items:
-        if it.get("id") == pengeluaran_id:
-            it["tanggal"] = tgl_str
-            it["personel_id"] = personel_id
-            it["nama_personel"] = nama_personel
-            it["peran"] = peran
-            it["kategori_biaya"] = kategori_biaya
-            it["nominal"] = float(nominal)
-            it["keterangan"] = keterangan or ""
-            it["nota"] = (nota or "").strip()
-            if cabang_id is not None:
-                it["cabang_id"] = cabang_id
-            if nama_cabang is not None:
-                it["nama_cabang"] = nama_cabang
-            updated = True
-            break
-
-    if updated:
-        _save_raw(raw)
-    return updated
+    """Mengubah data catatan operasional mobil."""
+    body = {
+        "tanggal": _iso(tanggal),
+        "supir_id": int(supir_id),
+        "kenek_id": int(kenek_id) if kenek_id and int(kenek_id) > 0 else None,
+        "uang_jalan": float(uang_jalan),
+        "keterangan": (keterangan or "").strip() or None,
+    }
+    api_put(f"/operasional-mobil/{pengeluaran_id}", json_body=body)
+    return True
 
 
 def delete_pengeluaran_supir_kenek(pengeluaran_id):
-    raw = _load_raw()
-    raw["pengeluaran"] = [it for it in raw.get("pengeluaran", []) if it.get("id") != pengeluaran_id]
-    _save_raw(raw)
+    """Menghapus catatan operasional mobil."""
+    api_delete(f"/operasional-mobil/{pengeluaran_id}")
     return True
 
 
 def get_rekap_supir_kenek_bulanan(bulan, tahun, cabang_id=None):
-    """Mengembalikan total nominal dan breakdown biaya kenek/supir untuk bulan tertentu."""
+    """Mengembalikan total nominal dan breakdown biaya operasional supir & kenek bulanan."""
     items = get_pengeluaran_supir_kenek(cabang_id=cabang_id, bulan=bulan, tahun=tahun)
-    total_biaya = sum(it["nominal"] for it in items)
-    
-    kategori_totals = {}
-    for k in KATEGORI_BIAYA_KENEK:
-        kategori_totals[k] = Decimal(0)
-    for it in items:
-        kat = it["kategori_biaya"]
-        kategori_totals[kat] = kategori_totals.get(kat, Decimal(0)) + it["nominal"]
+    total_biaya = sum((it["nominal"] for it in items), Decimal(0))
 
-    personel_totals = {}
+    supir_totals = {}
+    kenek_totals = {}
     for it in items:
-        p_name = it["nama_personel"]
-        personel_totals[p_name] = personel_totals.get(p_name, Decimal(0)) + it["nominal"]
+        s_name = it["nama_supir"]
+        supir_totals[s_name] = supir_totals.get(s_name, Decimal(0)) + it["nominal"]
+        if it.get("nama_kenek") and it["nama_kenek"] != "-":
+            k_name = it["nama_kenek"]
+            kenek_totals[k_name] = kenek_totals.get(k_name, Decimal(0)) + it["nominal"]
 
     return {
         "items": items,
         "total": total_biaya,
         "count": len(items),
-        "kategori_totals": kategori_totals,
-        "personel_totals": personel_totals,
+        "supir_totals": supir_totals,
+        "kenek_totals": kenek_totals,
+        "personel_totals": supir_totals,  # alias
     }
+

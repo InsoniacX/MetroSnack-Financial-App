@@ -86,7 +86,7 @@ def main(page: ft.Page):
         return routes.index(target) if target in routes else 0
 
     def create_view(route, title, body):
-        appbar = build_appbar(page, title)
+        appbar = build_appbar(page, title, refresh_current_view)
 
         navrail = nav_rail(
             page,
