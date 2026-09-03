@@ -5,19 +5,16 @@ token, dan error handling terpusat di satu tempat.
 """
 import requests
 
-# Alamat backend API. Tambahkan API_BASE_URL di config.py kamu.
-# Kalau belum ada, fallback ke localhost:8000 (untuk testing lokal).
-try:
-    from config import API_BASE_URL
-except ImportError:
-    API_BASE_URL = "http://localhost:8000"
+# URL dan timeout backend divalidasi melalui config.py.
+from config import API_BASE_URL, API_TIMEOUT_SECONDS
 
 # app_state dipakai untuk ambil access_token yang disimpan waktu login
 # (lihat db/auth_repo.py -- token ditaruh sebagai key "access_token" di
 # dict user yang sama yang disimpan app_state.login()).
 from state import app_state
 
-TIMEOUT_SECONDS = 15
+TIMEOUT_SECONDS = API_TIMEOUT_SECONDS
+_SESSION = requests.Session()
 
 
 class ApiError(Exception):
@@ -62,31 +59,37 @@ def _handle(resp):
     return resp.json()
 
 
+def _request(method, path, params=None, json_body=None):
+    response = _SESSION.request(
+        method=method,
+        url=f"{API_BASE_URL}{path}",
+        headers=_headers(),
+        params=params,
+        json=json_body,
+        timeout=TIMEOUT_SECONDS,
+    )
+    return _handle(response)
+
+
 def api_get(path, params=None):
-    resp = requests.get(f"{API_BASE_URL}{path}", headers=_headers(), params=params, timeout=TIMEOUT_SECONDS)
-    return _handle(resp)
+    return _request("GET", path, params=params)
 
 
 def api_post(path, json_body=None):
-    resp = requests.post(f"{API_BASE_URL}{path}", headers=_headers(), json=json_body, timeout=TIMEOUT_SECONDS)
-    return _handle(resp)
+    return _request("POST", path, json_body=json_body)
 
 
 def api_put(path, json_body=None):
-    resp = requests.put(f"{API_BASE_URL}{path}", headers=_headers(), json=json_body, timeout=TIMEOUT_SECONDS)
-    return _handle(resp)
+    return _request("PUT", path, json_body=json_body)
 
 
 def api_patch(path, params=None):
-    resp = requests.patch(f"{API_BASE_URL}{path}", headers=_headers(), params=params, timeout=TIMEOUT_SECONDS)
-    return _handle(resp)
+    return _request("PATCH", path, params=params)
 
 
 def api_patch_json(path, json_body=None):
-    resp = requests.patch(f"{API_BASE_URL}{path}", headers=_headers(), json=json_body, timeout=TIMEOUT_SECONDS)
-    return _handle(resp)
+    return _request("PATCH", path, json_body=json_body)
 
 
 def api_delete(path):
-    resp = requests.delete(f"{API_BASE_URL}{path}", headers=_headers(), timeout=TIMEOUT_SECONDS)
-    return _handle(resp)
+    return _request("DELETE", path)
