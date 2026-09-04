@@ -78,17 +78,14 @@ def get_nav_config(user=None):
             ft.NavigationRailDestination(icon=ft.Icons.LOCAL_SHIPPING_OUTLINED, selected_icon=ft.Icons.LOCAL_SHIPPING, label="Supir/Kenek"),
             ft.NavigationRailDestination(icon=ft.Icons.FACTORY_OUTLINED, selected_icon=ft.Icons.FACTORY, label="Pabrik"),
             ft.NavigationRailDestination(icon=ft.Icons.WAREHOUSE_OUTLINED, selected_icon=ft.Icons.WAREHOUSE, label="Balaraja"),
+            ft.NavigationRailDestination(icon=ft.Icons.ASSESSMENT_OUTLINED, selected_icon=ft.Icons.ASSESSMENT, label="Rekap")
         ])
         routes.extend([
             "/supir-kenek",
             "/pengambilan-pabrik",
             "/pengambilan-balaraja",
+            "/rekap-bulanan",
         ])
-
-    destinations.append(
-        ft.NavigationRailDestination(icon=ft.Icons.ASSESSMENT_OUTLINED, selected_icon=ft.Icons.ASSESSMENT, label="Rekap")
-    )
-    routes.append("/rekap-bulanan")
 
     if is_admin:
         destinations.append(
