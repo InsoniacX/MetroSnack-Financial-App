@@ -10,7 +10,7 @@ import requests
 try:
     from config import API_BASE_URL
 except ImportError:
-    API_BASE_URL = "http://localhost:8000"
+    API_BASE_URL = "http://localhost:8080"
 
 # app_state dipakai untuk ambil access_token yang disimpan waktu login
 # (lihat db/auth_repo.py -- token ditaruh sebagai key "access_token" di
