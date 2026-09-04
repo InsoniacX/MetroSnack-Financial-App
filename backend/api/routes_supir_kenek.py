@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from auth.dependencies import (
-    assert_cabang_access,
     get_current_user,
     require_admin,
 )
+from auth.feature_access import assert_zebor_feature_access
 from models.schemas import SupirKenekCreate, SupirKenekUpdate
-from repositories import cabang_repo
 from repositories import supir_kenek_repo as repo
 from repositories.activity_repo import log_activity
 
@@ -18,13 +17,7 @@ router = APIRouter(
 
 
 def _assert_cabang_request(user, cabang_id):
-    assert_cabang_access(user, cabang_id)
-
-    if cabang_repo.get_cabang_name(cabang_id) is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Cabang tidak ditemukan",
-        )
+    assert_zebor_feature_access(user, cabang_id)
 
 
 def _get_authorized_header(user, supir_kenek_id):
@@ -37,7 +30,7 @@ def _get_authorized_header(user, supir_kenek_id):
         )
 
     _, cabang_id, _, _ = header
-    assert_cabang_access(user, cabang_id)
+    assert_zebor_feature_access(user, cabang_id)
 
     return header
 

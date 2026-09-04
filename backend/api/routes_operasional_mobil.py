@@ -2,15 +2,12 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
-from auth.dependencies import (
-    assert_cabang_access,
-    get_current_user,
-)
+from auth.dependencies import get_current_user
+from auth.feature_access import assert_zebor_feature_access
 from models.schemas import (
     OperasionalMobilCreate,
     OperasionalMobilUpdate,
 )
-from repositories import cabang_repo
 from repositories import operasional_mobil_repo as repo
 from repositories import supir_kenek_repo
 from repositories.activity_repo import log_activity
@@ -35,13 +32,7 @@ def _assert_date_range(tanggal_awal, tanggal_akhir):
 
 
 def _assert_cabang_request(user, cabang_id):
-    assert_cabang_access(user, cabang_id)
-
-    if cabang_repo.get_cabang_name(cabang_id) is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Cabang tidak ditemukan",
-        )
+    assert_zebor_feature_access(user, cabang_id)
 
 
 def _get_authorized_header(user, operasional_id):
@@ -54,7 +45,7 @@ def _get_authorized_header(user, operasional_id):
         )
 
     _, cabang_id, _, _ = header
-    assert_cabang_access(user, cabang_id)
+    assert_zebor_feature_access(user, cabang_id)
 
     return header
 
