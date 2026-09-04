@@ -1,5 +1,5 @@
 # Configuration
-config.py
+.env
 
 # Development
 test_login.py
