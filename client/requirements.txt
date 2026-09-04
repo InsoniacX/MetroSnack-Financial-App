@@ -2,3 +2,4 @@ flet==0.86.5
 flet-charts==0.86.5
 reportlab
 requests
+python-dotenv==1.0.1
