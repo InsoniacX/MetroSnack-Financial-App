@@ -1,5 +1,5 @@
 import flet as ft
-from components.appbar import build_appbar, nav_rail
+from components.appbar import build_appbar, nav_rail, get_nav_config
 from state import app_state
 from config import APP_TITLE
 from db.folder_repo import get_invoice_ids
@@ -43,22 +43,7 @@ def main(page: ft.Page):
         route_change(page.route)
 
     def get_selected_index(route):
-        is_admin = app_state.user and app_state.user.get("role") == "admin"
-        is_pusat = app_state.user and app_state.user.get("cabang_id") is None
-
-        routes = [
-            "/dashboard",
-            "/invoices",
-            "/pendapatan-pengeluaran",
-            "/supir-kenek",
-            "/pengambilan-pabrik",
-            "/pengambilan-balaraja",
-            "/rekap-bulanan",
-        ]
-        if is_admin:
-            routes.extend(["/users", "/activity-log"])
-        if is_pusat:
-            routes.append("/cabang")
+        _, routes = get_nav_config()
 
         if route.startswith("/dashboard"):
             target = "/dashboard"
@@ -128,6 +113,36 @@ def main(page: ft.Page):
             page.views.append(login_view.build_view(page))
             page.update()
             return
+
+        actor = app_state.user or {}
+        is_admin = actor.get("role") == "admin"
+        is_pusat = actor.get("cabang_id") is None
+        nama_cabang = str(actor.get("nama_cabang") or "").strip().lower()
+        is_zebor = "zebor" in nama_cabang
+        show_ops = is_admin or is_zebor
+
+        # Guard role-based & account-based routes
+        if r in ("/supir-kenek", "/pengambilan-pabrik", "/pengambilan-balaraja") and not show_ops:
+            page.go("/dashboard")
+            return
+
+        if r in ("/users", "/activity-log") and not is_admin:
+            page.go("/dashboard")
+            return
+
+        if r == "/cabang" and not (is_admin and is_pusat):
+            page.go("/dashboard")
+            return
+
+        if r.startswith("/invoices/cabang/") and not is_pusat:
+            try:
+                cabang_id = int(r.split("/")[3])
+                if cabang_id != actor.get("cabang_id"):
+                    page.go("/invoices")
+                    return
+            except Exception:
+                page.go("/invoices")
+                return
 
         if r == "/":
             page.go("/dashboard")

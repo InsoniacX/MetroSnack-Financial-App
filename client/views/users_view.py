@@ -8,6 +8,19 @@ from utils.validation import require_text, require_password
 
 
 def build_view(page: ft.Page):
+    def close_dialog(e=None):
+        page.pop_dialog()
+        page.update()
+
+    def refresh():
+        if page.views and len(page.views[-1].controls) > 0:
+            row_control = page.views[-1].controls[0]
+            if hasattr(row_control, "controls") and len(row_control.controls) >= 3:
+                row_control.controls[2].content = build_view(page)
+                page.update()
+                return
+        page.update()
+
     actor = app_state.user
     if not actor or actor.get("role") != "admin":
         return ft.View(
@@ -22,10 +35,6 @@ def build_view(page: ft.Page):
         )
 
     is_pusat = actor.get("cabang_id") is None
-
-    def refresh():
-        page.views[-1] = build_view(page)
-        page.update()
 
     try:
         users = get_all_users(None if is_pusat else actor["cabang_id"])
@@ -109,8 +118,7 @@ def build_view(page: ft.Page):
 
             new_id = create_user(username_val, password_val, nama_val, role_val, target_cabang_id)
             log_activity(actor["id"], actor["username"], "CREATE", "user", new_id, f"Membuat user baru {username_val} (role: {role_val})", target_cabang_id)
-            page.pop_dialog()
-            page.update()
+            close_dialog(e)
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -124,7 +132,7 @@ def build_view(page: ft.Page):
             new_user_row2,
         ], tight=True, spacing=10),
         actions=[
-            ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
+            ft.TextButton("Batal", on_click=close_dialog),
             ft.ElevatedButton("Simpan", on_click=submit_new_user),
         ]
     )
@@ -146,8 +154,7 @@ def build_view(page: ft.Page):
             nama_val = require_text("Nama Lengkap", edit_nama.value, max_length=100)
             update_user(uid, nama_val, edit_role.value)
             log_activity(actor["id"], actor["username"], "UPDATE", "user", uid, f"Mengubah data user {edit_target['username']} (nama: {nama_val}, role: {edit_role.value})", edit_target["cabang_id"])
-            page.pop_dialog()
-            page.update()
+            close_dialog(e)
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -158,7 +165,7 @@ def build_view(page: ft.Page):
         title=ft.Text("Edit User"),
         content=ft.Column([edit_nama, edit_role], tight=True, spacing=10),
         actions=[
-            ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
+            ft.TextButton("Batal", on_click=close_dialog),
             ft.ElevatedButton("Simpan", on_click=submit_edit_user),
         ],
     )
@@ -186,8 +193,7 @@ def build_view(page: ft.Page):
             reset_password(uid, password_val)
             log_activity(actor["id"], actor["username"], "UPDATE", "user", uid, f"Reset password user {reset_target['username']}", reset_target["cabang_id"])
             reset_password_field.value = ""
-            page.pop_dialog()
-            page.update()
+            close_dialog(e)
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -198,7 +204,7 @@ def build_view(page: ft.Page):
         title=ft.Text("Reset Password user"),
         content=reset_password_field,
         actions=[
-            ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
+            ft.TextButton("Batal", on_click=close_dialog),
             ft.ElevatedButton("Simpan", on_click=submit_reset_password),
         ],
     )

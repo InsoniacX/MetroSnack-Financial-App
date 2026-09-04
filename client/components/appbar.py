@@ -2,10 +2,6 @@ import flet as ft
 from state import app_state
 
 
-import flet as ft
-from state import app_state
-
-
 def build_appbar(page, title, refresh_current_view=None):
     user = app_state.user
     nama = user.get("nama", "") if user else ""
@@ -56,29 +52,40 @@ def build_appbar(page, title, refresh_current_view=None):
     )
 
 
-def nav_rail(page, selected_index, refresh_current_view=None):
-    is_dark = page.theme_mode == ft.ThemeMode.DARK
-    is_admin = app_state.user and app_state.user.get("role") == "admin"
-    is_pusat = app_state.user and app_state.user.get("cabang_id") is None
+def get_nav_config(user=None):
+    if user is None:
+        user = app_state.user or {}
+    is_admin = user.get("role") == "admin"
+    is_pusat = user.get("cabang_id") is None
+    nama_cabang = str(user.get("nama_cabang") or "").strip().lower()
+    is_zebor = "zebor" in nama_cabang
+
+    show_ops = is_admin or is_zebor
 
     destinations = [
         ft.NavigationRailDestination(icon=ft.Icons.DASHBOARD_OUTLINED, selected_icon=ft.Icons.DASHBOARD, label="Dashboard"),
         ft.NavigationRailDestination(icon=ft.Icons.DESCRIPTION_OUTLINED, selected_icon=ft.Icons.DESCRIPTION, label="Invoice"),
         ft.NavigationRailDestination(icon=ft.Icons.SWAP_HORIZ_OUTLINED, selected_icon=ft.Icons.SWAP_HORIZ, label="Kas"),
-        ft.NavigationRailDestination(icon=ft.Icons.LOCAL_SHIPPING_OUTLINED, selected_icon=ft.Icons.LOCAL_SHIPPING, label="Supir/Kenek"),
-        ft.NavigationRailDestination(icon=ft.Icons.FACTORY_OUTLINED, selected_icon=ft.Icons.FACTORY, label="Pabrik"),
-        ft.NavigationRailDestination(icon=ft.Icons.WAREHOUSE_OUTLINED, selected_icon=ft.Icons.WAREHOUSE, label="Balaraja"),
-        ft.NavigationRailDestination(icon=ft.Icons.ASSESSMENT_OUTLINED, selected_icon=ft.Icons.ASSESSMENT, label="Rekap"),
     ]
     routes = [
         "/dashboard",
         "/invoices",
         "/pendapatan-pengeluaran",
-        "/supir-kenek",
-        "/pengambilan-pabrik",
-        "/pengambilan-balaraja",
-        "/rekap-bulanan",
     ]
+
+    if show_ops:
+        destinations.extend([
+            ft.NavigationRailDestination(icon=ft.Icons.LOCAL_SHIPPING_OUTLINED, selected_icon=ft.Icons.LOCAL_SHIPPING, label="Supir/Kenek"),
+            ft.NavigationRailDestination(icon=ft.Icons.FACTORY_OUTLINED, selected_icon=ft.Icons.FACTORY, label="Pabrik"),
+            ft.NavigationRailDestination(icon=ft.Icons.WAREHOUSE_OUTLINED, selected_icon=ft.Icons.WAREHOUSE, label="Balaraja"),
+            ft.NavigationRailDestination(icon=ft.Icons.ASSESSMENT_OUTLINED, selected_icon=ft.Icons.ASSESSMENT, label="Rekap")
+        ])
+        routes.extend([
+            "/supir-kenek",
+            "/pengambilan-pabrik",
+            "/pengambilan-balaraja",
+            "/rekap-bulanan",
+        ])
 
     if is_admin:
         destinations.append(
@@ -90,15 +97,22 @@ def nav_rail(page, selected_index, refresh_current_view=None):
         )
         routes.append("/activity-log")
 
-    if is_pusat:
+    if is_admin and is_pusat:
         destinations.append(
             ft.NavigationRailDestination(icon=ft.Icons.STORE_OUTLINED, selected_icon=ft.Icons.STORE, label="Cabang")
         )
         routes.append("/cabang")
 
+    return destinations, routes
+
+
+def nav_rail(page, selected_index, refresh_current_view=None):
+    is_dark = page.theme_mode == ft.ThemeMode.DARK
+    destinations, routes = get_nav_config()
+
     rail_height = max(550, len(destinations) * 62 + 20)
     navrail = ft.NavigationRail(
-        selected_index=selected_index,
+        selected_index=selected_index if 0 <= selected_index < len(destinations) else 0,
         label_type=ft.NavigationRailLabelType.ALL,
         min_width=90,
         bgcolor=ft.Colors.BLACK if is_dark else ft.Colors.GREY_50,
