@@ -187,18 +187,78 @@ def test_ringkasan_pendapatan_pengeluaran_bulanan(
     assert money(payload["pendapatan_bersih"]) == Decimal("1250000")
 
 
-def test_fitur_pendapatan_ditolak_untuk_cabang_lain(
+@pytest.mark.parametrize(
+    "jenis",
+    ["pendapatan", "pengeluaran"],
+)
+def test_fitur_kas_dapat_digunakan_cabang_non_zebor(
     client,
     cabang_b_headers,
     seeded_ids,
+    jenis,
 ):
-    response = client.get(
-        "/pendapatan-pengeluaran",
-        params={"cabang_id": seeded_ids["cabang_b"]},
-        headers=cabang_b_headers,
-    )
+    unique_suffix = uuid4().hex[:8]
+    nama_entry = f"Kas cabang B {jenis} {unique_suffix}"
+    created_id = None
 
-    assert response.status_code == 403
+    try:
+        create_response = client.post(
+            "/pendapatan-pengeluaran",
+            headers=cabang_b_headers,
+            json={
+                "cabang_id": seeded_ids["cabang_b"],
+                "tanggal": "2099-12-30",
+                "jenis": jenis,
+                "nama_pengeluaran": nama_entry,
+                "nominal": "125000",
+            },
+        )
+
+        assert create_response.status_code == 200
+        created_id = create_response.json()["id"]
+
+        list_response = client.get(
+            "/pendapatan-pengeluaran",
+            params={
+                "cabang_id": seeded_ids["cabang_b"],
+                "tanggal_awal": "2099-12-30",
+                "tanggal_akhir": "2099-12-30",
+                "jenis": jenis,
+            },
+            headers=cabang_b_headers,
+        )
+
+        assert list_response.status_code == 200
+        assert any(
+            row[0] == created_id
+            for row in list_response.json()
+        )
+
+        delete_response = client.delete(
+            f"/pendapatan-pengeluaran/{created_id}",
+            headers=cabang_b_headers,
+        )
+
+        assert delete_response.status_code == 200
+    finally:
+        if created_id is not None:
+            execute(
+                """
+                DELETE FROM activity_log
+                WHERE entity = %s AND entity_id = %s
+                """,
+                (
+                    "pendapatan_pengeluaran_harian",
+                    created_id,
+                ),
+            )
+            execute(
+                """
+                DELETE FROM pendapatan_pengeluaran_harian
+                WHERE id = %s
+                """,
+                (created_id,),
+            )
 
 
 def test_tanggal_filter_terbalik_ditolak(
@@ -269,15 +329,15 @@ def test_daftar_supir_kenek_cabang_sendiri(
     assert "Kenek Test" in names
 
 
-def test_isolasi_cabang_supir_kenek(
+def test_fitur_supir_kenek_ditolak_untuk_cabang_non_zebor(
     client,
-    admin_zebor_headers,
+    cabang_b_headers,
     seeded_ids,
 ):
     response = client.get(
         "/supir-kenek",
         params={"cabang_id": seeded_ids["cabang_b"]},
-        headers=admin_zebor_headers,
+        headers=cabang_b_headers,
     )
 
     assert response.status_code == 403
@@ -439,15 +499,15 @@ def test_ringkasan_operasional_mobil_seed(
     assert money(payload["total_uang_jalan"]) == Decimal("150000")
 
 
-def test_isolasi_cabang_operasional_mobil(
+def test_fitur_operasional_mobil_ditolak_untuk_cabang_non_zebor(
     client,
-    admin_zebor_headers,
+    cabang_b_headers,
     seeded_ids,
 ):
     response = client.get(
         "/operasional-mobil",
         params={"cabang_id": seeded_ids["cabang_b"]},
-        headers=admin_zebor_headers,
+        headers=cabang_b_headers,
     )
 
     assert response.status_code == 403
@@ -648,15 +708,20 @@ def test_sumber_pengambilan_kas_tidak_valid_ditolak(
     assert response.status_code == 422
 
 
-def test_isolasi_cabang_pengambilan_kas(
+@pytest.mark.parametrize(
+    "sumber",
+    ["pabrik", "balaraja"],
+)
+def test_fitur_pengambilan_ditolak_untuk_cabang_non_zebor(
     client,
-    admin_zebor_headers,
+    cabang_b_headers,
     seeded_ids,
+    sumber,
 ):
     response = client.get(
-        "/pengambilan-kas/pabrik",
+        f"/pengambilan-kas/{sumber}",
         params={"cabang_id": seeded_ids["cabang_b"]},
-        headers=admin_zebor_headers,
+        headers=cabang_b_headers,
     )
 
     assert response.status_code == 403
@@ -962,3 +1027,28 @@ def test_mutasi_pengambilan_kas_lintas_cabang_ditolak(
     )
 
     assert delete_response.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "/pendapatan-pengeluaran",
+        "/operasional-mobil",
+        "/supir-kenek",
+        "/pengambilan-kas/pabrik",
+        "/pengambilan-kas/balaraja",
+    ],
+)
+def test_admin_pusat_dapat_mengakses_seluruh_fitur(
+    client,
+    pusat_headers,
+    seeded_ids,
+    endpoint,
+):
+    response = client.get(
+        endpoint,
+        params={"cabang_id": seeded_ids["cabang_b"]},
+        headers=pusat_headers,
+    )
+
+    assert response.status_code == 200

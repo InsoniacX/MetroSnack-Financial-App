@@ -32,7 +32,3 @@ LOCKOUT_MINUTES = 15
 # --- App ---
 APP_TITLE = "MetroSnack API"
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
-
-PENDAPATAN_PENGELUARAN_ALLOWED_CABANG = [
-    c.strip() for c in os.getenv("PENDAPATAN_PENGELUARAN_ALLOWED_CABANG", "Zebor").split(",") if c.strip()
-]
