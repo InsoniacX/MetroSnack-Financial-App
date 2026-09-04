@@ -6,6 +6,19 @@ from state import app_state
 from utils.validation import require_text
 
 def build_view(page: ft.Page):
+    def close_dialog(e=None):
+        page.pop_dialog()
+        page.update()
+
+    def refresh():
+        if page.views and len(page.views[-1].controls) > 0:
+            row_control = page.views[-1].controls[0]
+            if hasattr(row_control, "controls") and len(row_control.controls) >= 3:
+                row_control.controls[2].content = build_view(page)
+                page.update()
+                return
+        page.update()
+
     actor = app_state.user
     is_pusat = actor and actor.get("cabang_id") is None
 
@@ -15,15 +28,11 @@ def build_view(page: ft.Page):
             controls=[
                 build_appbar(page, "Akses Ditolak"),
                 ft.Container(
-                    content = ft.Text("Halaman ini hanya bisa diakses oleh Admin Pusat.", size=16), 
+                    content=ft.Text("Halaman ini hanya bisa diakses oleh Admin Pusat.", size=16), 
                     padding=24
                 ),
             ],
         )
-
-    def refresh():
-        page.views[-1] = build_view(page)
-        page.update()
 
     try:
         cabang_list = get_all_cabang()
@@ -38,7 +47,7 @@ def build_view(page: ft.Page):
             log_activity(actor["id"], actor["username"], "UPDATE", "cabang", cid, f"{aksi} cabang {nama}", None)
             refresh()
         except Exception as ex:
-            page.show_dialog(ft.SnackBar(ft.Text(f"Gagal mengubah status: \n {ex}"), bgcolor=ft.Color.RED_400))
+            page.show_dialog(ft.SnackBar(ft.Text(f"Gagal mengubah status: \n {ex}"), bgcolor=ft.Colors.RED_400))
 
     new_nama = ft.TextField(label="Nama Cabang", width=250)
     new_alamat = ft.TextField(label="Alamat Cabang", width=350)
@@ -50,8 +59,7 @@ def build_view(page: ft.Page):
                 raise ValueError(f"Cabang '{nama_val}' sudah ada.")
             cid = create_cabang(nama_val, (new_alamat.value or "").strip())
             log_activity(actor["id"], actor["username"], "CREATE", "cabang", cid, f"Membuat cabang {nama_val}", None)
-            page.pop_dialog()
-            page.update()
+            close_dialog(e)
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -60,9 +68,9 @@ def build_view(page: ft.Page):
 
     add_dlg = ft.AlertDialog(
         title=ft.Text("Tambah Cabang Baru"),
-        content = ft.Column([new_nama, new_alamat], tight=True, spacing=10),
+        content=ft.Column([new_nama, new_alamat], tight=True, spacing=10),
         actions=[
-            ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
+            ft.TextButton("Batal", on_click=close_dialog),
             ft.ElevatedButton("Simpan", on_click=submit_new_cabang),
         ],
     )
@@ -72,8 +80,8 @@ def build_view(page: ft.Page):
         new_alamat.value = ""
         page.show_dialog(add_dlg)
 
-    edit_nama = ft.TextField(label = "Nama Cabang", width=250)
-    edit_alamat = ft.TextField(label = "Alamat Cabang", width=350)
+    edit_nama = ft.TextField(label="Nama Cabang", width=250)
+    edit_alamat = ft.TextField(label="Alamat Cabang", width=350)
     edit_target = {"cid": None}
 
     def submit_edit_cabang(e):
@@ -85,10 +93,8 @@ def build_view(page: ft.Page):
             if cabang_name_exist(nama_val, exclude_id=cid):
                 raise ValueError(f"Cabang '{nama_val}' sudah dipakai cabang lain.")
             update_cabang(cid, nama_val, (edit_alamat.value or "").strip())
-            log_activity(actor["id"], actor["username"], "UPDATE", "cabang", cid, f"Mengubah data cabang {nama_val}")
-            page.pop_dialog()
-            
-            page.update()
+            log_activity(actor["id"], actor["username"], "UPDATE", "cabang", cid, f"Mengubah data cabang {nama_val}", None)
+            close_dialog(e)
             refresh()
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
@@ -103,7 +109,7 @@ def build_view(page: ft.Page):
             spacing=10
         ),
         actions=[
-            ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
+            ft.TextButton("Batal", on_click=close_dialog),
             ft.ElevatedButton("Submit", on_click=submit_edit_cabang)
         ]
     )
@@ -138,12 +144,12 @@ def build_view(page: ft.Page):
 
     table = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("Nama Cabang")), 
-            ft.DataColumn(ft.Text("Alamat")),
-            ft.DataColumn(ft.Text("Jml User")),
-            ft.DataColumn(ft.Text("Jml Folder")),
-            ft.DataColumn(ft.Text("Status")),
-            ft.DataColumn(ft.Text("Aksi")),
+            ft.DataColumn(label=ft.Text("Nama Cabang")), 
+            ft.DataColumn(label=ft.Text("Alamat")),
+            ft.DataColumn(label=ft.Text("Jml User")),
+            ft.DataColumn(label=ft.Text("Jml Folder")),
+            ft.DataColumn(label=ft.Text("Status")),
+            ft.DataColumn(label=ft.Text("Aksi")),
         ],
         rows=rows,
     )
