@@ -420,26 +420,51 @@ def build_view(page: ft.Page):
 
     def apply_filter(e=None):
         del e
-        try:
-            filter_state["start_date"] = (
-                parse_date("Dari Tanggal", filter_start_field.value)
-                if filter_start_field.value
-                else None
-            )
-        except Exception:
-            filter_state["start_date"] = None
 
         try:
-            filter_state["end_date"] = (
-                parse_date("Sampai Tanggal", filter_end_field.value)
-                if filter_end_field.value
+            new_start_date = (
+                parse_date(
+                    "Dari Tanggal",
+                    filter_start_field.value,
+                )
+                if (filter_start_field.value or "").strip()
                 else None
             )
-        except Exception:
-            filter_state["end_date"] = None
 
-        filter_state["sort_order"] = filter_sort_dropdown.value or "desc"
+            new_end_date = (
+                parse_date(
+                    "Sampai Tanggal",
+                    filter_end_field.value,
+                )
+                if (filter_end_field.value or "").strip()
+                else None
+            )
+
+            if (
+                new_start_date is not None
+                and new_end_date is not None
+                and new_start_date > new_end_date
+            ):
+                raise ValueError(
+                    "Dari Tanggal tidak boleh melewati Sampai Tanggal."
+                )
+
+        except ValueError as error:
+            page.show_dialog(
+                ft.SnackBar(
+                    ft.Text(str(error)),
+                    bgcolor=ft.Colors.RED_400,
+                )
+            )
+            return
+
+        filter_state["start_date"] = new_start_date
+        filter_state["end_date"] = new_end_date
+        filter_state["sort_order"] = (
+            filter_sort_dropdown.value or "desc"
+        )
         filter_state["search"] = search_field.value or ""
+
         refresh_table_content()
 
     def reset_filter(e=None):
@@ -666,7 +691,10 @@ def build_view(page: ft.Page):
             items = get_filtered_data()
         except Exception as error:
             items = []
-            error_message = str(error)
+            error_message = (
+                str(error).strip()
+                or "Terjadi kesalahan ketika mengambil data."
+            )
 
         pendapatan_total = sum(
             (item["nominal"] for item in items if item["jenis"] == "Pendapatan"),
@@ -677,11 +705,21 @@ def build_view(page: ft.Page):
             Decimal(0),
         )
         saldo_total = pendapatan_total - pengeluaran_total
+        if error_message:
+            pendapatan_value = "Tidak tersedia"
+            pengeluaran_value = "Tidak tersedia"
+            saldo_value = "Tidak tersedia"
+            count_value = "Tidak tersedia"
+        else:
+            pendapatan_value = rp(pendapatan_total)
+            pengeluaran_value = rp(pengeluaran_total)
+            saldo_value = rp(saldo_total)
+            count_value = f"{len(items)} Transaksi"
 
         metric_pendapatan_card.content = metric_card(
             page,
             "Total Pendapatan",
-            rp(pendapatan_total),
+            pendapatan_value,
             light_color=ft.Colors.GREEN_50,
             light_text_color=ft.Colors.GREEN_900,
             dark_color=ft.Colors.GREEN_900,
@@ -690,7 +728,7 @@ def build_view(page: ft.Page):
         metric_pengeluaran_card.content = metric_card(
             page,
             "Total Pengeluaran",
-            rp(pengeluaran_total),
+            pengeluaran_value,
             light_color=ft.Colors.RED_50,
             light_text_color=ft.Colors.RED_900,
             dark_color=ft.Colors.RED_900,
@@ -699,7 +737,7 @@ def build_view(page: ft.Page):
         metric_saldo_card.content = metric_card(
             page,
             "Saldo Kas Bersih",
-            rp(saldo_total),
+            saldo_value,
             light_color=(
                 ft.Colors.BLUE_50 if saldo_total >= 0 else ft.Colors.RED_50
             ),
@@ -716,7 +754,7 @@ def build_view(page: ft.Page):
         metric_count_card.content = metric_card(
             page,
             "Jumlah Transaksi",
-            f"{len(items)} Transaksi",
+            count_value,
             light_color=ft.Colors.GREY_100,
             light_text_color=ft.Colors.GREY_900,
             dark_color=ft.Colors.GREY_800,
@@ -857,7 +895,25 @@ def build_view(page: ft.Page):
 
     async def export_pdf(e):
         del e
-        items = get_filtered_data()
+
+        try:
+            items = get_filtered_data()
+        except Exception as error:
+            message = (
+                str(error).strip()
+                or "Data transaksi gagal dimuat."
+            )
+
+            page.show_dialog(
+                ft.SnackBar(
+                    ft.Text(
+                        f"PDF tidak dibuat: {message}"
+                    ),
+                    bgcolor=ft.Colors.RED_400,
+                )
+            )
+            return
+
         if not items:
             page.show_dialog(
                 ft.SnackBar(
