@@ -123,7 +123,7 @@ def add_pengambilan_balaraja(
     tanggal,
     keterangan,
     nominal,
-    cabang_id=1,
+    cabang_id,
     **kwargs,
 ):
     """Menambahkan catatan pengambilan kas balaraja baru."""

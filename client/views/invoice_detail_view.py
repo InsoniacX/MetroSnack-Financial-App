@@ -1,7 +1,7 @@
 import flet as ft
 from decimal import Decimal
 from datetime import date
-from components.appbar import build_appbar, nav_rail
+from components.appbar import build_appbar, is_mobile_layout, nav_rail
 from components.metric_card import metric_card
 from utils.formatting import rp
 from utils.validation import parse_date, parse_positive_decimal
@@ -14,17 +14,35 @@ from state import app_state
 
 
 def build_view(page: ft.Page, invoice_id: int):
-    def close_dialog(e):
+    mobile = is_mobile_layout(page)
+    page_width = getattr(page, "width", None) or 1100
+    dialog_content_width = min(520, max(260, page_width - 72))
+    small_dialog_width = min(420, max(260, page_width - 72))
+
+    def close_dialog(e=None):
+        del e
         page.pop_dialog()
         page.update()
 
     def refresh():
-        if page.views and len(page.views[-1].controls) > 0:
-            row_control = page.views[-1].controls[0]
-            if hasattr(row_control, "controls") and len(row_control.controls) >= 3:
-                row_control.controls[2].content = build_view(page, invoice_id)
+        if page.views and page.views[-1].controls:
+            root_control = page.views[-1].controls[0]
+            replacement = build_view(page, invoice_id)
+
+            if isinstance(root_control, ft.Container):
+                root_control.content = replacement
                 page.update()
                 return
+
+            if (
+                isinstance(root_control, ft.Row)
+                and len(root_control.controls) >= 3
+                and isinstance(root_control.controls[2], ft.Container)
+            ):
+                root_control.controls[2].content = replacement
+                page.update()
+                return
+
         page.update()
 
     refresh_table = refresh
@@ -66,6 +84,12 @@ def build_view(page: ft.Page, invoice_id: int):
     akumulasi_kurang_uang = sum([t[4] for t in transaksi if t[5] == "Kurang Uang"]) if transaksi else Decimal(0)
     akumulasi_lebih_uang = sum([t[4] for t in transaksi if t[5] == "Lebih Uang"]) if transaksi else Decimal(0)
 
+    def parse_optional_note(value):
+        note = (value or "").strip() or None
+        if note and len(note) > 100:
+            raise ValueError("Nota maksimal 100 karakter.")
+        return note
+
     def hapus_baris(tid, tanggal_str):
         try:
             delete_transaksi(tid)
@@ -74,10 +98,25 @@ def build_view(page: ft.Page, invoice_id: int):
         except Exception as ex:
             page.show_dialog(ft.SnackBar(ft.Text(f"Gagal hapus baris: {ex}"), bgcolor=ft.Colors.RED_400))
 
-    edit_tgl_field = ft.TextField(label="Tanggal (YYYY-MM-DD)", width=200)
-    edit_barang_field = ft.TextField(label="Masuk Barang (Rp)", width=200)
-    edit_uang_field = ft.TextField(label="Masuk Uang (Rp)", width=200)
-    edit_nota_field = ft.TextField(label="Nota (opsional)", width=200)
+    edit_tgl_field = ft.TextField(
+        label="Tanggal (YYYY-MM-DD)",
+        col={"xs": 12, "sm": 6},
+    )
+    edit_barang_field = ft.TextField(
+        label="Masuk Barang (Rp)",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        col={"xs": 12, "sm": 6},
+    )
+    edit_uang_field = ft.TextField(
+        label="Masuk Uang (Rp)",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        col={"xs": 12, "sm": 6},
+    )
+    edit_nota_field = ft.TextField(
+        label="Nota (opsional)",
+        max_length=100,
+        col={"xs": 12, "sm": 6},
+    )
     edit_transaksi_target = {"tid": None}
 
     def submit_edit_baris(e):
@@ -88,7 +127,7 @@ def build_view(page: ft.Page, invoice_id: int):
             tanggal_val = parse_date("Tanggal", edit_tgl_field.value)
             barang_val = parse_positive_decimal("Masuk Barang", edit_barang_field.value)
             uang_val = parse_positive_decimal("Masuk Uang", edit_uang_field.value)
-            nota_val = (edit_nota_field.value or "").strip() or None
+            nota_val = parse_optional_note(edit_nota_field.value)
             update_transaksi(tid, tanggal_val, barang_val, uang_val, nota_val)
             log_activity(actor["id"], actor["username"], "UPDATE", "transaksi_harian", tid, f"Mengubah transaksi {tanggal_val.strftime('%d-%m-%Y')} di invoice {no_laporan or invoice_id}", invoice_cabang_id)
             close_dialog(e)
@@ -100,10 +139,28 @@ def build_view(page: ft.Page, invoice_id: int):
 
     edit_dlg = ft.AlertDialog(
         title=ft.Text("Edit baris transaksi harian"),
-        content=ft.Column([
-            ft.Row([edit_tgl_field, edit_barang_field]),
-            ft.Row([edit_uang_field, edit_nota_field]),
-        ], tight=True, spacing=10),
+        content=ft.Container(
+            content=ft.ResponsiveRow(
+                [
+                    edit_tgl_field,
+                    edit_barang_field,
+                    edit_uang_field,
+                    edit_nota_field,
+                ],
+                spacing=10,
+                run_spacing=10,
+            ),
+            width=dialog_content_width,
+        ),
+        content_padding=ft.Padding.only(
+            left=16,
+            right=16,
+            top=8,
+            bottom=8,
+        ),
+        inset_padding=12 if mobile else 40,
+        scrollable=True,
+        actions_alignment=ft.MainAxisAlignment.END,
         actions=[
             ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
             ft.ElevatedButton("Simpan Perubahan", on_click=submit_edit_baris),
@@ -145,17 +202,37 @@ def build_view(page: ft.Page, invoice_id: int):
 
     table = table_build(transaksi)
 
-    tgl_field = ft.TextField(label="Tanggal (YYYY-MM-DD)", width=200, value=date.today().isoformat())
-    barang_field = ft.TextField(label="Masuk Barang (Rp)", width=200, value="0")
-    uang_field = ft.TextField(label="Masuk Uang (Rp)", width=200, value="0")
-    nota_field = ft.TextField(label="Nota (opsional)", width=200)
+    tgl_field = ft.TextField(
+        label="Tanggal (YYYY-MM-DD)",
+        value=date.today().isoformat(),
+        col={"xs": 12, "sm": 6},
+    )
+    barang_field = ft.TextField(
+        label="Masuk Barang (Rp)",
+        value="0",
+        hint_text="Contoh: 150000 atau 150.000",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        col={"xs": 12, "sm": 6},
+    )
+    uang_field = ft.TextField(
+        label="Masuk Uang (Rp)",
+        value="0",
+        hint_text="Contoh: 150000 atau 150.000",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        col={"xs": 12, "sm": 6},
+    )
+    nota_field = ft.TextField(
+        label="Nota (opsional)",
+        max_length=100,
+        col={"xs": 12, "sm": 6},
+    )
 
     def submit_baris(e):
         try:
             tanggal_val = parse_date("Tanggal", tgl_field.value)
             barang_val = parse_positive_decimal("Masuk Barang", barang_field.value)
             uang_val = parse_positive_decimal("Masuk Uang", uang_field.value)
-            nota_val = (nota_field.value or "").strip() or None
+            nota_val = parse_optional_note(nota_field.value)
             add_transaksi(invoice_id, tanggal_val, barang_val, uang_val, nota_val)
             log_activity(actor["id"], actor["username"], "CREATE", "transaksi_harian", invoice_id, f"Tambah transaksi {tanggal_val.strftime('%d-%m-%Y')} di invoice {no_laporan or invoice_id}",
                          invoice_cabang_id)
@@ -168,10 +245,28 @@ def build_view(page: ft.Page, invoice_id: int):
 
     dlg = ft.AlertDialog(
         title=ft.Text("Tambah baris transaksi harian"),
-        content=ft.Column([
-            ft.Row([tgl_field, barang_field]),
-            ft.Row([uang_field, nota_field]),
-        ], tight=True, spacing=10),
+        content=ft.Container(
+            content=ft.ResponsiveRow(
+                [
+                    tgl_field,
+                    barang_field,
+                    uang_field,
+                    nota_field,
+                ],
+                spacing=10,
+                run_spacing=10,
+            ),
+            width=dialog_content_width,
+        ),
+        content_padding=ft.Padding.only(
+            left=16,
+            right=16,
+            top=8,
+            bottom=8,
+        ),
+        inset_padding=12 if mobile else 40,
+        scrollable=True,
+        actions_alignment=ft.MainAxisAlignment.END,
         actions=[
             ft.TextButton("Batal", on_click=close_dialog),
             ft.ElevatedButton("Simpan", on_click=submit_baris),
@@ -185,7 +280,11 @@ def build_view(page: ft.Page, invoice_id: int):
         nota_field.value = ""
         page.show_dialog(dlg)
 
-    sisa_barang_field = ft.TextField(label="Sisa Barang di Toko (Rp)", width=220)
+    sisa_barang_field = ft.TextField(
+        label="Sisa Barang di Toko (Rp)",
+        hint_text="Contoh: 150000 atau 150.000",
+        keyboard_type=ft.KeyboardType.NUMBER,
+    )
 
     def submit_sisa_barang(e):
         try:
@@ -201,10 +300,23 @@ def build_view(page: ft.Page, invoice_id: int):
 
     sisa_barang_dlg = ft.AlertDialog(
         title=ft.Text("Update Sisa Barang di Toko"),
-        content=ft.Column([
-            ft.Text("Masukkan hasil cek fisik barang hari ini.", size=12, color=ft.Colors.GREY_600),
-            sisa_barang_field,
-        ], tight=True, spacing=10),
+        content=ft.Container(
+            content=ft.Column(
+                [
+                    ft.Text(
+                        "Masukkan hasil cek fisik barang hari ini.",
+                        size=12,
+                        color=ft.Colors.GREY_600,
+                    ),
+                    sisa_barang_field,
+                ],
+                tight=True,
+                spacing=10,
+            ),
+            width=small_dialog_width,
+        ),
+        inset_padding=12 if mobile else 40,
+        scrollable=True,
         actions=[
             ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
             ft.ElevatedButton("Simpan", on_click=submit_sisa_barang),
@@ -248,12 +360,50 @@ def build_view(page: ft.Page, invoice_id: int):
         except Exception as ex:
             page.show_dialog(ft.SnackBar(ft.Text(f"Gagal export PDF: {ex}"), bgcolor=ft.Colors.RED_400))
 
-    header_info = ft.Row([
-        ft.Column([ft.Text("No.", size=11, color=ft.Colors.WHITE if is_dark else ft.Colors.GREY_600), ft.Text(no_laporan or "-", size=14, weight=ft.FontWeight.W_500)]),
-        ft.Column([ft.Text("Date", size=11, color=ft.Colors.WHITE if is_dark else ft.Colors.GREY_600), ft.Text(tgl_dibuat.strftime("%d-%m-%Y") if tgl_dibuat else "-", size=14, weight=ft.FontWeight.W_500)]),
-        ft.Column([ft.Text("TGL Laporan", size=11, color=ft.Colors.WHITE if is_dark else ft.Colors.GREY_600), ft.Text(tgl_laporan.strftime("%d-%m-%Y") if tgl_laporan else "-", size=14, weight=ft.FontWeight.W_500)]),
-        ft.Column([ft.Text("Invoice / Bon", size=11, color=ft.Colors.WHITE if is_dark else ft.Colors.GREY_600), ft.Text(rp(invoice_bon), size=14, weight=ft.FontWeight.W_500)]),
-    ], spacing=32)
+    def header_info_item(label, value):
+        return ft.Container(
+            content=ft.Column(
+                [
+                    ft.Text(
+                        label,
+                        size=11,
+                        color=(
+                            ft.Colors.WHITE
+                            if is_dark
+                            else ft.Colors.GREY_600
+                        ),
+                    ),
+                    ft.Text(
+                        value,
+                        size=14,
+                        weight=ft.FontWeight.W_500,
+                    ),
+                ],
+                spacing=2,
+            ),
+            col={"xs": 6, "sm": 3},
+        )
+
+    header_info = ft.ResponsiveRow(
+        [
+            header_info_item("No.", no_laporan or "-"),
+            header_info_item(
+                "Date",
+                tgl_dibuat.strftime("%d-%m-%Y")
+                if tgl_dibuat
+                else "-",
+            ),
+            header_info_item(
+                "TGL Laporan",
+                tgl_laporan.strftime("%d-%m-%Y")
+                if tgl_laporan
+                else "-",
+            ),
+            header_info_item("Invoice / Bon", rp(invoice_bon)),
+        ],
+        spacing=12,
+        run_spacing=12,
+    )
 
     # PENTING: back_route TIDAK boleh ke /invoices/{folder_id} lagi --
     # sejak kebijakan 1 folder = 1 invoice, main.py auto-redirect route
@@ -268,21 +418,100 @@ def build_view(page: ft.Page, invoice_id: int):
     sisa_hutang_nilai, light_sisa_hutang_bg, light_sisa_hutang_text,dark_sisa_hutang_bg, dark_sisa_hutang_text  = hutang_style(sisa_hutang_toko)
     sisa_barang_display = rp(sisa_barang_manual) if sisa_barang_manual is not None else "Belum diisi"
 
+    header_title = ft.Container(
+        content=ft.Row(
+            [
+                ft.IconButton(
+                    ft.Icons.ARROW_BACK,
+                    on_click=lambda e: page.go(back_route),
+                ),
+                ft.Text(
+                    "Detail Laporan Invoice",
+                    size=20,
+                    weight=ft.FontWeight.W_500,
+                    expand=True,
+                ),
+            ]
+        ),
+        col={"xs": 12, "md": 7},
+    )
+    header_action = ft.Container(
+        content=ft.Row(
+            [
+                ft.OutlinedButton(
+                    "Export PDF" if mobile else "Export ke PDF",
+                    icon=ft.Icons.PICTURE_AS_PDF,
+                    on_click=export_pdf,
+                )
+            ],
+            alignment=(
+                ft.MainAxisAlignment.START
+                if mobile
+                else ft.MainAxisAlignment.END
+            ),
+        ),
+        col={"xs": 12, "md": 5},
+    )
+
+    transaction_title = ft.Container(
+        content=ft.Text(
+            "Transaksi Harian",
+            size=16,
+            weight=ft.FontWeight.W_500,
+        ),
+        col={"xs": 12, "sm": 6},
+    )
+    transaction_action = ft.Container(
+        content=ft.Row(
+            [
+                ft.ElevatedButton(
+                    "Tambah Transaksi"
+                    if mobile
+                    else "Tambah baris transaksi",
+                    icon=ft.Icons.ADD,
+                    on_click=open_tambah_dialog,
+                    bgcolor=ft.Colors.BLUE_700,
+                    color=ft.Colors.WHITE,
+                )
+            ],
+            alignment=(
+                ft.MainAxisAlignment.START
+                if mobile
+                else ft.MainAxisAlignment.END
+            ),
+        ),
+        col={"xs": 12, "sm": 6},
+    )
+
+    table_controls = []
+    if mobile:
+        table_controls.append(
+            ft.Text(
+                "Geser tabel ke samping untuk melihat kolom lainnya.",
+                size=11,
+                color=ft.Colors.GREY_500,
+            )
+        )
+    table_controls.append(
+        ft.Row([table], scroll=ft.ScrollMode.AUTO)
+    )
+
     body = ft.Column([
-        ft.Row([
-            ft.IconButton(ft.Icons.ARROW_BACK, on_click=lambda e: page.go(back_route)),
-            ft.Text("Detail Laporan Invoice", size=20, weight=ft.FontWeight.W_500, expand=True),
-            ft.OutlinedButton("Export ke PDF", icon=ft.Icons.PICTURE_AS_PDF, on_click=export_pdf),
-        ]),
+        ft.ResponsiveRow(
+            [header_title, header_action],
+            spacing=8,
+            run_spacing=8,
+        ),
         ft.Container(height=8),
         ft.Container(header_info, padding=16, border_radius=10),
         ft.Container(height=20),
-        ft.Row([
-            ft.Text("Transaksi Harian", size=16, weight=ft.FontWeight.W_500, expand=True),
-            ft.ElevatedButton("Tambah baris transaksi", icon=ft.Icons.ADD, on_click=open_tambah_dialog, bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE),
-        ]),
+        ft.ResponsiveRow(
+            [transaction_title, transaction_action],
+            spacing=8,
+            run_spacing=8,
+        ),
         ft.Container(height=8),
-        ft.Row([table], scroll=ft.ScrollMode.AUTO),
+        ft.Column(table_controls, spacing=6),
         ft.Container(height=12),
         ft.ResponsiveRow([
             ft.Container(

@@ -72,7 +72,7 @@ def get_personel_list(cabang_id=None, active_only=False, search=None):
     return results
 
 
-def add_personel(nama, cabang_id=1):
+def add_personel(nama, cabang_id):
     """Menambahkan supir/kenek baru ke master data."""
     body = {
         "cabang_id": int(cabang_id),
@@ -215,10 +215,13 @@ def add_pengeluaran_supir_kenek(
     kenek_id=None,
     uang_jalan=0,
     keterangan="",
-    cabang_id=1,
+    cabang_id=None,
     **kwargs,
 ):
     """Menambahkan catatan operasional mobil baru."""
+    if cabang_id is None:
+        raise ValueError("Cabang wajib ditentukan.")
+
     body = {
         "tanggal": _iso(tanggal),
         "supir_id": int(supir_id),
