@@ -590,11 +590,7 @@ async def main(page: ft.Page):
     page.on_resize = handle_resize
     page.on_view_pop = view_pop
 
-    page.go(
-        page.route
-        if page.route not in ("", "/")
-        else "/login"
-    )
+    route_change(page.route)
 
 
 if __name__ == "__main__":
