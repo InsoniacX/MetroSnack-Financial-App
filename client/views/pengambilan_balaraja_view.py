@@ -61,7 +61,6 @@ def build_view(page: ft.Page):
         page.update()
 
     def resolve_cabang_id(dropdown):
-        
         if not is_pusat:
             cabang_id = actor.get("cabang_id")
             if cabang_id is None:
@@ -122,8 +121,8 @@ def build_view(page: ft.Page):
         min_lines=2,
         max_lines=3,
         hint_text=(
-            "Contoh: Pengambilan Kas Gudang Balaraja - Pembelian Keripik "
-            "& Repack"
+            "Contoh: Pengambilan Kas Gudang Balaraja - "
+            "Pembelian Keripik & Repack"
         ),
         col={"xs": 12},
     )
@@ -381,40 +380,76 @@ def build_view(page: ft.Page):
 
     def apply_filter(e=None):
         del e
-        selected_month = filter_bulan_dropdown.value
-        filter_state["bulan"] = (
-            None
-            if selected_month == "Semua" or not selected_month
-            else int(selected_month)
-        )
 
-        selected_year = filter_tahun_dropdown.value
-        filter_state["tahun"] = (
-            None
-            if selected_year == "Semua" or not selected_year
-            else int(selected_year)
-        )
+        selected_month = str(
+            filter_bulan_dropdown.value or ""
+        ).strip()
+        selected_year = str(
+            filter_tahun_dropdown.value or ""
+        ).strip()
 
         try:
-            filter_state["start_date"] = (
-                parse_date("Dari Tanggal", filter_start_field.value)
-                if filter_start_field.value
+            new_month = (
+                None
+                if selected_month in ("", "Semua")
+                else int(selected_month)
+            )
+            new_year = (
+                None
+                if selected_year in ("", "Semua")
+                else int(selected_year)
+            )
+
+            if new_month is not None and new_year is None:
+                raise ValueError(
+                    "Pilih tahun ketika menggunakan filter bulan."
+                )
+
+            new_start_date = (
+                parse_date(
+                    "Dari Tanggal",
+                    filter_start_field.value,
+                )
+                if (filter_start_field.value or "").strip()
                 else None
             )
-        except Exception:
-            filter_state["start_date"] = None
 
-        try:
-            filter_state["end_date"] = (
-                parse_date("Sampai Tanggal", filter_end_field.value)
-                if filter_end_field.value
+            new_end_date = (
+                parse_date(
+                    "Sampai Tanggal",
+                    filter_end_field.value,
+                )
+                if (filter_end_field.value or "").strip()
                 else None
             )
-        except Exception:
-            filter_state["end_date"] = None
 
-        filter_state["sort_order"] = filter_sort_dropdown.value or "desc"
+            if (
+                new_start_date is not None
+                and new_end_date is not None
+                and new_start_date > new_end_date
+            ):
+                raise ValueError(
+                    "Dari Tanggal tidak boleh melewati Sampai Tanggal."
+                )
+
+        except (TypeError, ValueError) as error:
+            page.show_dialog(
+                ft.SnackBar(
+                    ft.Text(str(error)),
+                    bgcolor=ft.Colors.RED_400,
+                )
+            )
+            return
+
+        filter_state["bulan"] = new_month
+        filter_state["tahun"] = new_year
+        filter_state["start_date"] = new_start_date
+        filter_state["end_date"] = new_end_date
+        filter_state["sort_order"] = (
+            filter_sort_dropdown.value or "desc"
+        )
         filter_state["search"] = search_field.value or ""
+
         refresh_table_content()
 
     def reset_filter(e=None):
@@ -428,9 +463,6 @@ def build_view(page: ft.Page):
         apply_filter()
 
     search_field.on_submit = apply_filter
-    filter_bulan_dropdown.on_change = apply_filter
-    filter_tahun_dropdown.on_change = apply_filter
-    filter_sort_dropdown.on_change = apply_filter
 
     filter_title = ft.Container(
         content=ft.Row(
@@ -521,6 +553,10 @@ def build_view(page: ft.Page):
     metric_max_card = ft.Container(col={"xs": 12, "sm": 6, "md": 3})
 
     table_container = ft.Container()
+    table_state = {
+        "items": [],
+        "load_error": None,
+    }
 
     def on_sort_tanggal(column_index, ascending):
         del column_index
@@ -536,8 +572,8 @@ def build_view(page: ft.Page):
                 if hasattr(item["tanggal"], "strftime")
                 else str(item["tanggal"])
             )
-
             cells = [ft.DataCell(ft.Text(tanggal_text, size=13))]
+
             if is_pusat:
                 cells.append(
                     ft.DataCell(
@@ -618,8 +654,14 @@ def build_view(page: ft.Page):
                 search=filter_state["search"],
                 sort_order=filter_state["sort_order"],
             )
+            table_state["items"] = items
+            table_state["load_error"] = None
+
         except Exception as error:
             items = []
+            table_state["items"] = []
+            table_state["load_error"] = str(error)
+
             page.show_dialog(
                 ft.SnackBar(
                     ft.Text(f"Error memuat data: {error}"),
@@ -645,7 +687,7 @@ def build_view(page: ft.Page):
         metric_total_card.content = metric_card(
             page,
             "Total Pengambilan Balaraja",
-            rp(total_sum),
+            "-" if table_state["load_error"] else rp(total_sum),
             light_color=ft.Colors.INDIGO_50,
             light_text_color=ft.Colors.INDIGO_900,
             dark_color=ft.Colors.INDIGO_900,
@@ -654,7 +696,11 @@ def build_view(page: ft.Page):
         metric_count_card.content = metric_card(
             page,
             "Jumlah Transaksi",
-            f"{total_transactions} Transaksi",
+            (
+                "Tidak tersedia"
+                if table_state["load_error"]
+                else f"{total_transactions} Transaksi"
+            ),
             light_color=ft.Colors.BLUE_50,
             light_text_color=ft.Colors.BLUE_900,
             dark_color=ft.Colors.BLUE_900,
@@ -663,7 +709,7 @@ def build_view(page: ft.Page):
         metric_avg_card.content = metric_card(
             page,
             "Rata-rata Transaksi",
-            rp(average_sum),
+            "-" if table_state["load_error"] else rp(average_sum),
             light_color=ft.Colors.ORANGE_50,
             light_text_color=ft.Colors.ORANGE_900,
             dark_color=ft.Colors.ORANGE_900,
@@ -672,7 +718,7 @@ def build_view(page: ft.Page):
         metric_max_card.content = metric_card(
             page,
             "Transaksi Terbesar",
-            rp(maximum_sum),
+            "-" if table_state["load_error"] else rp(maximum_sum),
             light_color=ft.Colors.TEAL_50,
             light_text_color=ft.Colors.TEAL_900,
             dark_color=ft.Colors.TEAL_900,
@@ -685,7 +731,43 @@ def build_view(page: ft.Page):
         )
         state_background = ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE
 
-        if not items:
+        if table_state["load_error"]:
+            table_container.content = ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Icon(
+                            ft.Icons.ERROR_OUTLINE,
+                            size=48,
+                            color=ft.Colors.RED_400,
+                        ),
+                        ft.Text(
+                            "Data pengambilan Balaraja gagal dimuat",
+                            size=15,
+                            weight=ft.FontWeight.W_500,
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                        ft.Text(
+                            table_state["load_error"],
+                            size=12,
+                            color=ft.Colors.GREY_500,
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                        ft.OutlinedButton(
+                            "Coba Lagi",
+                            icon=ft.Icons.REFRESH,
+                            on_click=lambda e: refresh_table_content(),
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                alignment=ft.Alignment.CENTER,
+                padding=state_padding,
+                border_radius=10,
+                border=state_border,
+                bgcolor=state_background,
+            )
+
+        elif not items:
             table_container.content = ft.Container(
                 content=ft.Column(
                     [
@@ -717,18 +799,28 @@ def build_view(page: ft.Page):
                 border=state_border,
                 bgcolor=state_background,
             )
+
         else:
             columns = [
                 ft.DataColumn(
                     ft.Text("Tanggal"),
-                    on_sort=lambda e: on_sort_tanggal(0, e.ascending),
+                    on_sort=lambda e: on_sort_tanggal(
+                        0,
+                        e.ascending,
+                    ),
                 )
             ]
+
             if is_pusat:
-                columns.append(ft.DataColumn(ft.Text("Cabang")))
+                columns.append(
+                    ft.DataColumn(ft.Text("Cabang"))
+                )
+
             columns.extend(
                 [
-                    ft.DataColumn(ft.Text("Keterangan / Rincian")),
+                    ft.DataColumn(
+                        ft.Text("Keterangan / Rincian")
+                    ),
                     ft.DataColumn(ft.Text("Nominal Kas")),
                     ft.DataColumn(ft.Text("Diinput Oleh")),
                     ft.DataColumn(ft.Text("Aksi")),
@@ -737,32 +829,47 @@ def build_view(page: ft.Page):
 
             data_table = ft.DataTable(
                 sort_column_index=0,
-                sort_ascending=filter_state["sort_order"] == "asc",
+                sort_ascending=(
+                    filter_state["sort_order"] == "asc"
+                ),
                 columns=columns,
                 rows=build_table_rows(items),
                 border=ft.Border.all(
                     0.5,
-                    ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_200,
+                    (
+                        ft.Colors.GREY_700
+                        if is_dark
+                        else ft.Colors.GREY_200
+                    ),
                 ),
                 border_radius=10,
                 heading_row_color=(
-                    ft.Colors.GREY_800 if is_dark else ft.Colors.GREY_100
+                    ft.Colors.GREY_800
+                    if is_dark
+                    else ft.Colors.GREY_100
                 ),
                 show_bottom_border=True,
             )
 
             table_controls = []
+
             if mobile:
                 table_controls.append(
                     ft.Text(
-                        "Geser tabel ke samping untuk melihat kolom lainnya.",
+                        "Geser tabel ke samping untuk melihat "
+                        "kolom lainnya.",
                         size=11,
                         color=ft.Colors.GREY_500,
                     )
                 )
+
             table_controls.append(
-                ft.Row([data_table], scroll=ft.ScrollMode.AUTO)
+                ft.Row(
+                    [data_table],
+                    scroll=ft.ScrollMode.AUTO,
+                )
             )
+
             table_container.content = ft.Column(
                 table_controls,
                 spacing=6,
@@ -770,17 +877,6 @@ def build_view(page: ft.Page):
 
         if page.views:
             page.update()
-
-    def get_filtered_data():
-        return get_pengambilan_balaraja(
-            cabang_id=filter_state["cabang_id"],
-            bulan=filter_state["bulan"],
-            tahun=filter_state["tahun"],
-            start_date=filter_state["start_date"],
-            end_date=filter_state["end_date"],
-            search=filter_state["search"],
-            sort_order=filter_state["sort_order"],
-        )
 
     # ---------------------------------------------------------------------
     # Ekspor PDF
@@ -791,18 +887,36 @@ def build_view(page: ft.Page):
 
     async def export_pdf(e):
         del e
-        items = get_filtered_data()
-        if not items:
+
+        if table_state["load_error"]:
             page.show_dialog(
                 ft.SnackBar(
-                    ft.Text("Tidak ada data untuk diexport."),
+                    ft.Text(
+                        "PDF tidak dapat dibuat karena data belum "
+                        "berhasil dimuat."
+                    ),
                     bgcolor=ft.Colors.RED_400,
                 )
             )
             return
 
-        cabang_name = "Semua Cabang"
-        if filter_state["cabang_id"]:
+        items = list(table_state["items"])
+
+        if not items:
+            page.show_dialog(
+                ft.SnackBar(
+                    ft.Text("Tidak ada data untuk diekspor."),
+                    bgcolor=ft.Colors.RED_400,
+                )
+            )
+            return
+
+        if not is_pusat:
+            cabang_name = (
+                actor.get("nama_cabang")
+                or f"Cabang {actor.get('cabang_id')}"
+            )
+        elif filter_state["cabang_id"]:
             cabang_name = next(
                 (
                     cabang[1]
@@ -811,21 +925,45 @@ def build_view(page: ft.Page):
                 ),
                 f"Cabang {filter_state['cabang_id']}",
             )
-        elif not is_pusat:
-            cabang_name = actor.get("nama_cabang", "Cabang")
+        else:
+            cabang_name = "Semua Cabang"
 
-        if filter_state["start_date"] and filter_state["end_date"]:
-            period = (
-                f"{filter_state['start_date'].strftime('%d-%m-%Y')} s/d "
-                f"{filter_state['end_date'].strftime('%d-%m-%Y')}"
-            )
-        elif filter_state["bulan"]:
-            period = (
+        period_parts = []
+
+        if filter_state["bulan"] and filter_state["tahun"]:
+            period_parts.append(
                 f"{MONTH[filter_state['bulan']]} "
                 f"{filter_state['tahun']}"
             )
-        else:
-            period = f"Tahun {filter_state['tahun']}"
+        elif filter_state["tahun"]:
+            period_parts.append(
+                f"Tahun {filter_state['tahun']}"
+            )
+
+        if (
+            filter_state["start_date"]
+            and filter_state["end_date"]
+        ):
+            period_parts.append(
+                f"{filter_state['start_date'].strftime('%d-%m-%Y')} "
+                f"s/d {filter_state['end_date'].strftime('%d-%m-%Y')}"
+            )
+        elif filter_state["start_date"]:
+            period_parts.append(
+                "Mulai "
+                f"{filter_state['start_date'].strftime('%d-%m-%Y')}"
+            )
+        elif filter_state["end_date"]:
+            period_parts.append(
+                "Sampai "
+                f"{filter_state['end_date'].strftime('%d-%m-%Y')}"
+            )
+
+        period = (
+            " | ".join(period_parts)
+            if period_parts
+            else "Semua Periode"
+        )
 
         total_sum = sum(
             (item["nominal"] for item in items),
