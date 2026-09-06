@@ -66,16 +66,17 @@ def build_view(page: ft.Page):
     # ---------------------------------------------------------------------
     # Dialog tambah dan edit pengeluaran operasional mobil
     # ---------------------------------------------------------------------
-    exp_id_target = {"id": None}
+    exp_id_target = {
+        "id": None,
+        "cabang_id": None,
+        "supir_id": None,
+        "kenek_id": None,
+    }
     personel_cached = []
-
-    try:
-        personel_cached = get_personel_list(
-            cabang_id=filter_state["cabang_id"],
-            active_only=True,
-        )
-    except Exception:
-        personel_cached = []
+    personel_all_cached = []
+    personel_load_error = {
+        "message": None,
+    }
 
     exp_tanggal = ft.TextField(
         label="Tanggal (YYYY-MM-DD)",
@@ -163,69 +164,155 @@ def build_view(page: ft.Page):
 
         return cabang_id
 
-    def refresh_personel_dropdown():
-        nonlocal personel_cached
-
-        try:
-            cabang_id = None if is_pusat else actor.get("cabang_id")
-            personel_cached = get_personel_list(
-                cabang_id=cabang_id,
-                active_only=True,
-            )
-        except Exception:
-            personel_cached = []
+    def update_exp_personel_options(
+        selected_cabang_id=None,
+        include_personel_ids=None,
+    ):
+        include_personel_ids = {
+            int(personel_id)
+            for personel_id in (include_personel_ids or set())
+            if personel_id is not None
+        }
 
         if is_pusat:
-            supir_options = [
-                ft.dropdown.Option(
-                    str(person["id"]),
-                    (
-                        f"{person['nama']} "
-                        f"({person.get('nama_cabang', 'Pusat')})"
-                        if person.get("nama_cabang")
-                        else person["nama"]
-                    ),
+            try:
+                target_cabang_id = (
+                    int(selected_cabang_id)
+                    if selected_cabang_id
+                    else None
                 )
-                for person in personel_cached
-            ]
-            kenek_options = [ft.dropdown.Option("", "Tanpa Kenek")] + [
-                ft.dropdown.Option(
-                    str(person["id"]),
-                    (
-                        f"{person['nama']} "
-                        f"({person.get('nama_cabang', 'Pusat')})"
-                        if person.get("nama_cabang")
-                        else person["nama"]
-                    ),
-                )
-                for person in personel_cached
-            ]
+            except (TypeError, ValueError):
+                target_cabang_id = None
         else:
-            supir_options = [
-                ft.dropdown.Option(str(person["id"]), person["nama"])
-                for person in personel_cached
-            ]
-            kenek_options = [ft.dropdown.Option("", "Tanpa Kenek")] + [
-                ft.dropdown.Option(str(person["id"]), person["nama"])
-                for person in personel_cached
-            ]
+            target_cabang_id = int(
+                actor.get("cabang_id")
+            )
 
-        exp_supir_dropdown.options = supir_options
-        exp_kenek_dropdown.options = kenek_options
+        available_personel = [
+            person
+            for person in personel_all_cached
+            if (
+                target_cabang_id is not None
+                and int(person["cabang_id"])
+                == target_cabang_id
+                and (
+                    person.get("aktif")
+                    or int(person["id"])
+                    in include_personel_ids
+                )
+            )
+        ]
 
-        valid_personel_ids = [str(person["id"]) for person in personel_cached]
-        if personel_cached and exp_supir_dropdown.value not in valid_personel_ids:
-            exp_supir_dropdown.value = str(personel_cached[0]["id"])
+        def personel_option(person):
+            label = person["nama"]
+
+            if not person.get("aktif"):
+                label += " (Nonaktif)"
+
+            return ft.dropdown.Option(
+                str(person["id"]),
+                label,
+            )
+
+        exp_supir_dropdown.options = [
+            personel_option(person)
+            for person in available_personel
+        ]
+
+        exp_kenek_dropdown.options = [
+            ft.dropdown.Option("", "Tanpa Kenek")
+        ] + [
+            personel_option(person)
+            for person in available_personel
+        ]
+
+        valid_personel_ids = [
+            str(person["id"])
+            for person in available_personel
+        ]
+
+        if (
+            exp_supir_dropdown.value
+            not in valid_personel_ids
+        ):
+            exp_supir_dropdown.value = (
+                valid_personel_ids[0]
+                if valid_personel_ids
+                else ""
+            )
+
+        if (
+            exp_kenek_dropdown.value
+            not in [""] + valid_personel_ids
+        ):
+            exp_kenek_dropdown.value = ""
+
+        no_available_personel = not valid_personel_ids
+
+        exp_supir_dropdown.disabled = (
+            target_cabang_id is None
+            or no_available_personel
+        )
+        exp_kenek_dropdown.disabled = (
+            target_cabang_id is None
+            or no_available_personel
+        )
+
+    def on_exp_cabang_change(e):
+        update_exp_personel_options(
+            e.control.value
+        )
+
+        if page.views:
+            page.update()
+
+    exp_cabang_dropdown.on_change = (
+        on_exp_cabang_change
+    )
+
+    def refresh_personel_dropdown():
+        nonlocal personel_cached, personel_all_cached
 
         try:
-            all_personel = get_personel_list(
+            personel_all_cached = get_personel_list(
                 cabang_id=filter_state["cabang_id"]
             )
-        except Exception:
-            all_personel = []
+            personel_cached = [
+                person
+                for person in personel_all_cached
+                if person.get("aktif")
+            ]
+            personel_load_error["message"] = None
+
+        except Exception as error:
+            personel_cached = []
+            personel_all_cached = []
+            personel_load_error["message"] = str(error)
+
+        included_personel_ids = set()
+
+        if exp_id_target["id"] is not None:
+            included_personel_ids = {
+                exp_id_target["supir_id"],
+                exp_id_target["kenek_id"],
+            }
+
+        selected_exp_cabang = (
+            exp_cabang_dropdown.value
+            if is_pusat
+            else actor.get("cabang_id")
+        )
+
+        update_exp_personel_options(
+            selected_cabang_id=selected_exp_cabang,
+            include_personel_ids=included_personel_ids,
+        )
 
         filter_personel_dropdown.options = [
-            ft.dropdown.Option("Semua", "Semua Supir/Kenek")
+            ft.dropdown.Option(
+                "Semua",
+                "Semua Supir/Kenek",
+            )
         ] + [
             ft.dropdown.Option(
                 str(person["id"]),
@@ -240,8 +327,30 @@ def build_view(page: ft.Page):
                     )
                 ),
             )
-            for person in all_personel
+            for person in personel_all_cached
         ]
+
+        selected_filter_value = (
+            filter_personel_dropdown.value or "Semua"
+        )
+        valid_filter_values = {
+            "Semua",
+            *[
+                str(person["id"])
+                for person in personel_all_cached
+            ],
+        }
+
+        if (
+            personel_load_error["message"] is None
+            and selected_filter_value
+            not in valid_filter_values
+        ):
+            filter_personel_dropdown.value = "Semua"
+            filter_state["personel_id"] = None
+
+        return personel_load_error["message"] is None
+
 
     def submit_exp_form(e):
         del e
@@ -256,19 +365,93 @@ def build_view(page: ft.Page):
             )
             keterangan = (exp_keterangan.value or "").strip()
 
-            if not exp_supir_dropdown.value:
-                raise ValueError("Silakan pilih Supir terlebih dahulu.")
+            cabang_id = resolve_cabang_id(
+                exp_cabang_dropdown
+            )
 
-            supir_id = int(exp_supir_dropdown.value)
+            if not exp_supir_dropdown.value:
+                raise ValueError(
+                    "Silakan pilih Supir terlebih dahulu."
+                )
+
+            supir_id = int(
+                exp_supir_dropdown.value
+            )
             kenek_id = (
                 int(exp_kenek_dropdown.value)
                 if exp_kenek_dropdown.value
                 else None
             )
 
-            cabang_id = resolve_cabang_id(exp_cabang_dropdown)
+            if (
+                kenek_id is not None
+                and kenek_id == supir_id
+            ):
+                raise ValueError(
+                    "Supir dan Kenek tidak boleh orang yang sama."
+                )
 
             is_edit = exp_id_target["id"] is not None
+            exp_id_target["cabang_id"] = None
+
+            personel_by_id = {
+                int(person["id"]): person
+                for person in personel_all_cached
+            }
+
+            def validate_selected_personel(
+                label,
+                personel_id,
+                allowed_inactive_id=None,
+            ):
+                if personel_id is None:
+                    return
+
+                selected_personel = personel_by_id.get(
+                    personel_id
+                )
+
+                if selected_personel is None:
+                    raise ValueError(
+                        f"{label} tidak ditemukan."
+                    )
+
+                if (
+                    int(selected_personel["cabang_id"])
+                    != cabang_id
+                ):
+                    raise ValueError(
+                        f"{label} harus berasal dari "
+                        "cabang yang sama."
+                    )
+
+                if (
+                    not selected_personel.get("aktif")
+                    and personel_id
+                    != allowed_inactive_id
+                ):
+                    raise ValueError(
+                        f"{label} sudah tidak aktif."
+                    )
+
+            validate_selected_personel(
+                "Supir",
+                supir_id,
+                (
+                    exp_id_target["supir_id"]
+                    if is_edit
+                    else None
+                ),
+            )
+            validate_selected_personel(
+                "Kenek",
+                kenek_id,
+                (
+                    exp_id_target["kenek_id"]
+                    if is_edit
+                    else None
+                ),
+            )
             if is_edit:
                 update_pengeluaran_supir_kenek(
                     pengeluaran_id=exp_id_target["id"],
@@ -365,12 +548,31 @@ def build_view(page: ft.Page):
 
     def open_add_exp_dialog(e=None):
         del e
-        refresh_personel_dropdown()
+
+        exp_id_target["id"] = None
+        exp_id_target["supir_id"] = None
+        exp_id_target["kenek_id"] = None
+
+        if is_pusat:
+            exp_cabang_dropdown.value = None
+
+        if not refresh_personel_dropdown():
+            page.show_dialog(
+                ft.SnackBar(
+                    ft.Text(
+                        "Daftar Supir/Kenek gagal dimuat: "
+                        f"{personel_load_error['message']}"
+                    ),
+                    bgcolor=ft.Colors.RED_400,
+                )
+            )
+            return
+
         if not personel_cached:
             page.show_dialog(
                 ft.SnackBar(
                     ft.Text(
-                        "Belum ada supir/kenek aktif di cabang ini. "
+                        "Belum ada Supir/Kenek aktif. "
                         "Tambahkan di tab Master terlebih dahulu."
                     ),
                     bgcolor=ft.Colors.ORANGE_800,
@@ -378,20 +580,24 @@ def build_view(page: ft.Page):
             )
             return
 
-        exp_id_target["id"] = None
-        exp_dialog_title.value = "Catat Operasional Mobil / Perjalanan"
+        exp_dialog_title.value = (
+            "Catat Operasional Mobil / Perjalanan"
+        )
         exp_tanggal.value = date.today().isoformat()
         exp_uang_jalan.value = ""
         exp_keterangan.value = ""
         exp_kenek_dropdown.value = ""
-        if is_pusat:
-            exp_cabang_dropdown.value = None
+
         page.show_dialog(exp_dialog)
 
     def open_edit_exp_dialog(item):
-        refresh_personel_dropdown()
         exp_id_target["id"] = item["id"]
-        exp_dialog_title.value = f"Edit Catatan Operasional #{item['id']}"
+        exp_id_target["supir_id"] = item["supir_id"]
+        exp_id_target["kenek_id"] = item.get("kenek_id")
+
+        exp_dialog_title.value = (
+            f"Edit Catatan Operasional #{item['id']}"
+        )
         exp_tanggal.value = (
             item["tanggal"].isoformat()
             if hasattr(item["tanggal"], "isoformat")
@@ -399,30 +605,31 @@ def build_view(page: ft.Page):
         )
         exp_supir_dropdown.value = str(item["supir_id"])
         exp_kenek_dropdown.value = (
-            str(item["kenek_id"]) if item.get("kenek_id") else ""
+            str(item["kenek_id"])
+            if item.get("kenek_id")
+            else ""
         )
         exp_uang_jalan.value = str(item["uang_jalan"])
         exp_keterangan.value = item["keterangan"] or ""
+
         if is_pusat:
-            exp_cabang_dropdown.value = str(item["cabang_id"])
+            exp_cabang_dropdown.value = str(
+                item["cabang_id"]
+            )
+
+        if not refresh_personel_dropdown():
+            page.show_dialog(
+                ft.SnackBar(
+                    ft.Text(
+                        "Daftar Supir/Kenek gagal dimuat: "
+                        f"{personel_load_error['message']}"
+                    ),
+                    bgcolor=ft.Colors.RED_400,
+                )
+            )
+            return
+
         page.show_dialog(exp_dialog)
-
-    # ---------------------------------------------------------------------
-    # Dialog tambah dan edit master personel
-    # ---------------------------------------------------------------------
-    personel_id_target = {"id": None}
-
-    personel_nama = ft.TextField(
-        label="Nama Lengkap Supir / Kenek *",
-        col={"xs": 12},
-    )
-
-    personel_cabang_dropdown = ft.Dropdown(
-        label="Cabang Penugasan",
-        options=[ft.dropdown.Option(str(cabang[0]), cabang[1]) for cabang in cabang_list],
-        value=None,
-        col={"xs": 12},
-    )
 
     def submit_personel_form(e):
         del e
@@ -645,34 +852,80 @@ def build_view(page: ft.Page):
 
     def apply_filter(e=None):
         del e
-        try:
-            filter_state["start_date"] = (
-                parse_date("Dari Tanggal", filter_start_field.value)
-                if filter_start_field.value
-                else None
-            )
-        except Exception:
-            filter_state["start_date"] = None
 
         try:
-            filter_state["end_date"] = (
-                parse_date("Sampai Tanggal", filter_end_field.value)
-                if filter_end_field.value
+            new_start_date = (
+                parse_date(
+                    "Dari Tanggal",
+                    filter_start_field.value,
+                )
+                if (filter_start_field.value or "").strip()
                 else None
             )
-        except Exception:
-            filter_state["end_date"] = None
 
-        filter_state["sort_order"] = filter_sort_dropdown.value or "desc"
+            new_end_date = (
+                parse_date(
+                    "Sampai Tanggal",
+                    filter_end_field.value,
+                )
+                if (filter_end_field.value or "").strip()
+                else None
+            )
 
-        selected_personel = filter_personel_dropdown.value
-        filter_state["personel_id"] = (
-            None
-            if selected_personel == "Semua" or not selected_personel
-            else int(selected_personel)
-        )
+            if (
+                new_start_date is not None
+                and new_end_date is not None
+                and new_start_date > new_end_date
+            ):
+                raise ValueError(
+                    "Dari Tanggal tidak boleh melewati "
+                    "Sampai Tanggal."
+                )
 
-        filter_state["search"] = search_field.value or ""
+            selected_personel = (
+                filter_personel_dropdown.value or "Semua"
+            )
+
+            new_personel_id = (
+                None
+                if selected_personel == "Semua"
+                else int(selected_personel)
+            )
+
+            if (
+                new_personel_id is not None
+                and new_personel_id <= 0
+            ):
+                raise ValueError(
+                    "Supir/Kenek yang dipilih tidak valid."
+                )
+
+            new_sort_order = (
+                filter_sort_dropdown.value or "desc"
+            )
+
+            if new_sort_order not in ("asc", "desc"):
+                raise ValueError(
+                    "Urutan tanggal tidak valid."
+                )
+
+        except (TypeError, ValueError) as error:
+            page.show_dialog(
+                ft.SnackBar(
+                    ft.Text(str(error)),
+                    bgcolor=ft.Colors.RED_400,
+                )
+            )
+            return
+
+        filter_state["start_date"] = new_start_date
+        filter_state["end_date"] = new_end_date
+        filter_state["personel_id"] = new_personel_id
+        filter_state["sort_order"] = new_sort_order
+        filter_state["search"] = (
+            search_field.value or ""
+        ).strip()
+
         refresh_table_content()
 
     def reset_filter(e=None):
@@ -777,6 +1030,10 @@ def build_view(page: ft.Page):
 
     table_exp_container = ft.Container()
     table_personel_container = ft.Container()
+    table_state = {
+        "items": [],
+        "load_error": None,
+    }
 
     def on_sort_exp_tanggal(column_index, ascending):
         del column_index
@@ -884,8 +1141,15 @@ def build_view(page: ft.Page):
                 search=filter_state["search"],
                 sort_order=filter_state["sort_order"],
             )
+
+            table_state["items"] = items
+            table_state["load_error"] = None
+
         except Exception as error:
             items = []
+            table_state["items"] = []
+            table_state["load_error"] = str(error)
+
             page.show_dialog(
                 ft.SnackBar(
                     ft.Text(f"Error memuat data: {error}"),
@@ -902,17 +1166,15 @@ def build_view(page: ft.Page):
             total_sum / total_trips if total_trips > 0 else Decimal(0)
         )
 
-        personel_list_all = get_personel_list(
-            cabang_id=filter_state["cabang_id"]
-        )
-        active_personel_count = len(
-            [person for person in personel_list_all if person.get("aktif")]
+        active_personel_count = len(personel_cached)
+        personel_metric_error = (
+            personel_load_error["message"]
         )
 
         metric_total_card.content = metric_card(
             page,
             "Total Uang Jalan",
-            rp(total_sum),
+            "-" if table_state["load_error"] else rp(total_sum),
             light_color=ft.Colors.RED_50,
             light_text_color=ft.Colors.RED_900,
             dark_color=ft.Colors.RED_900,
@@ -921,7 +1183,11 @@ def build_view(page: ft.Page):
         metric_trip_card.content = metric_card(
             page,
             "Total Perjalanan / Trip",
-            f"{total_trips} Trip",
+            (
+                "Tidak tersedia"
+                if table_state["load_error"]
+                else f"{total_trips} Trip"
+            ),
             light_color=ft.Colors.BLUE_50,
             light_text_color=ft.Colors.BLUE_900,
             dark_color=ft.Colors.BLUE_900,
@@ -930,7 +1196,7 @@ def build_view(page: ft.Page):
         metric_avg_card.content = metric_card(
             page,
             "Rata-rata Uang Jalan",
-            rp(average_sum),
+            "-" if table_state["load_error"] else rp(average_sum),
             light_color=ft.Colors.ORANGE_50,
             light_text_color=ft.Colors.ORANGE_900,
             dark_color=ft.Colors.ORANGE_900,
@@ -939,7 +1205,11 @@ def build_view(page: ft.Page):
         metric_personel_card.content = metric_card(
             page,
             "Supir & Kenek Aktif",
-            f"{active_personel_count} Orang",
+            (
+                "Tidak tersedia"
+                if personel_metric_error
+                else f"{active_personel_count} Orang"
+            ),
             light_color=ft.Colors.GREEN_50,
             light_text_color=ft.Colors.GREEN_900,
             dark_color=ft.Colors.GREEN_900,
@@ -952,7 +1222,43 @@ def build_view(page: ft.Page):
         )
         state_background = ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE
 
-        if not items:
+        if table_state["load_error"]:
+            table_exp_container.content = ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Icon(
+                            ft.Icons.ERROR_OUTLINE,
+                            size=48,
+                            color=ft.Colors.RED_400,
+                        ),
+                        ft.Text(
+                            "Data operasional kendaraan gagal dimuat",
+                            size=15,
+                            weight=ft.FontWeight.W_500,
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                        ft.Text(
+                            table_state["load_error"],
+                            size=12,
+                            color=ft.Colors.GREY_500,
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                        ft.OutlinedButton(
+                            "Coba Lagi",
+                            icon=ft.Icons.REFRESH,
+                            on_click=lambda e: refresh_table_content(),
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                alignment=ft.Alignment.CENTER,
+                padding=state_padding,
+                border_radius=10,
+                border=state_border,
+                bgcolor=state_background,
+            )
+
+        elif not items:
             table_exp_container.content = ft.Container(
                 content=ft.Column(
                     [
@@ -984,15 +1290,23 @@ def build_view(page: ft.Page):
                 border=state_border,
                 bgcolor=state_background,
             )
+
         else:
             columns = [
                 ft.DataColumn(
                     ft.Text("Tanggal"),
-                    on_sort=lambda e: on_sort_exp_tanggal(0, e.ascending),
+                    on_sort=lambda e: on_sort_exp_tanggal(
+                        0,
+                        e.ascending,
+                    ),
                 )
             ]
+
             if is_pusat:
-                columns.append(ft.DataColumn(ft.Text("Cabang")))
+                columns.append(
+                    ft.DataColumn(ft.Text("Cabang"))
+                )
+
             columns.extend(
                 [
                     ft.DataColumn(ft.Text("Supir")),
@@ -1006,32 +1320,47 @@ def build_view(page: ft.Page):
 
             data_table = ft.DataTable(
                 sort_column_index=0,
-                sort_ascending=filter_state["sort_order"] == "asc",
+                sort_ascending=(
+                    filter_state["sort_order"] == "asc"
+                ),
                 columns=columns,
                 rows=build_exp_table_rows(items),
                 border=ft.Border.all(
                     0.5,
-                    ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_200,
+                    (
+                        ft.Colors.GREY_700
+                        if is_dark
+                        else ft.Colors.GREY_200
+                    ),
                 ),
                 border_radius=10,
                 heading_row_color=(
-                    ft.Colors.GREY_800 if is_dark else ft.Colors.GREY_100
+                    ft.Colors.GREY_800
+                    if is_dark
+                    else ft.Colors.GREY_100
                 ),
                 show_bottom_border=True,
             )
 
             table_controls = []
+
             if mobile:
                 table_controls.append(
                     ft.Text(
-                        "Geser tabel ke samping untuk melihat kolom lainnya.",
+                        "Geser tabel ke samping untuk melihat "
+                        "kolom lainnya.",
                         size=11,
                         color=ft.Colors.GREY_500,
                     )
                 )
+
             table_controls.append(
-                ft.Row([data_table], scroll=ft.ScrollMode.AUTO)
+                ft.Row(
+                    [data_table],
+                    scroll=ft.ScrollMode.AUTO,
+                )
             )
+
             table_exp_container.content = ft.Column(
                 table_controls,
                 spacing=6,
@@ -1041,12 +1370,10 @@ def build_view(page: ft.Page):
             page.update()
 
     def refresh_personel_table():
-        try:
-            personel_list = get_personel_list(
-                cabang_id=None if is_pusat else actor.get("cabang_id")
-            )
-        except Exception:
-            personel_list = []
+        personel_list = list(personel_all_cached)
+        personel_table_error = (
+            personel_load_error["message"]
+        )
 
         state_border = ft.Border.all(
             0.5,
@@ -1054,7 +1381,47 @@ def build_view(page: ft.Page):
         )
         state_background = ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE
 
-        if not personel_list:
+        if personel_table_error:
+            table_personel_container.content = ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Icon(
+                            ft.Icons.ERROR_OUTLINE,
+                            size=48,
+                            color=ft.Colors.RED_400,
+                        ),
+                        ft.Text(
+                            "Data master Supir/Kenek gagal dimuat",
+                            size=15,
+                            weight=ft.FontWeight.W_500,
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                        ft.Text(
+                            personel_table_error,
+                            size=12,
+                            color=ft.Colors.GREY_500,
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                        ft.OutlinedButton(
+                            "Coba Lagi",
+                            icon=ft.Icons.REFRESH,
+                            on_click=lambda e: (
+                                refresh_personel_dropdown(),
+                                refresh_personel_table(),
+                                refresh_table_content(),
+                            ),
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                alignment=ft.Alignment.CENTER,
+                padding=state_padding,
+                border_radius=10,
+                border=state_border,
+                bgcolor=state_background,
+            )
+
+        elif not personel_list:
             table_personel_container.content = ft.Container(
                 content=ft.Column(
                     [
@@ -1071,8 +1438,8 @@ def build_view(page: ft.Page):
                             text_align=ft.TextAlign.CENTER,
                         ),
                         ft.Text(
-                            "Klik 'Tambah Supir/Kenek' untuk mendaftarkan "
-                            "nama personel baru.",
+                            "Klik 'Tambah Supir/Kenek' untuk "
+                            "mendaftarkan nama personel baru.",
                             size=12,
                             color=ft.Colors.GREY_500,
                             text_align=ft.TextAlign.CENTER,
@@ -1086,6 +1453,7 @@ def build_view(page: ft.Page):
                 border=state_border,
                 bgcolor=state_background,
             )
+
         else:
             rows = []
             for person in personel_list:
@@ -1249,15 +1617,6 @@ def build_view(page: ft.Page):
         if page.views:
             page.update()
 
-    def get_filtered_data():
-        return get_pengeluaran_supir_kenek(
-            cabang_id=filter_state["cabang_id"],
-            start_date=filter_state["start_date"],
-            end_date=filter_state["end_date"],
-            personel_id=filter_state["personel_id"],
-            search=filter_state["search"],
-            sort_order=filter_state["sort_order"],
-        )
 
     # ---------------------------------------------------------------------
     # Ekspor PDF
@@ -1268,7 +1627,19 @@ def build_view(page: ft.Page):
 
     async def export_pdf(e):
         del e
-        items = get_filtered_data()
+        if table_state["load_error"]:
+            page.show_dialog(
+                ft.SnackBar(
+                    ft.Text(
+                        "PDF tidak dapat dibuat karena data "
+                        "belum berhasil dimuat."
+                    ),
+                    bgcolor=ft.Colors.RED_400,
+                )
+            )
+            return
+
+        items = list(table_state["items"])
         if not items:
             page.show_dialog(
                 ft.SnackBar(
@@ -1310,9 +1681,7 @@ def build_view(page: ft.Page):
 
         personel_name = "Semua Supir/Kenek"
         if filter_state["personel_id"]:
-            all_personel = get_personel_list(
-                cabang_id=filter_state["cabang_id"]
-            )
+            all_personel = personel_all_cached
             selected_personel = next(
                 (
                     person
