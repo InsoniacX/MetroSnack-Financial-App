@@ -1,5 +1,6 @@
 import flet as ft
 
+from components.navigation import navigate
 from state import app_state
 
 
@@ -177,7 +178,7 @@ def build_appbar(
 
     def do_logout(e):
         app_state.logout()
-        page.go("/login")
+        navigate(page, "/login")
 
     def toggle_theme(e):
         page.theme_mode = (
@@ -308,7 +309,8 @@ def nav_rail(
             else ft.Colors.GREY_50
         ),
         destinations=destinations,
-        on_change=lambda e: page.go(
+        on_change=lambda e: navigate(
+            page,
             routes[e.control.selected_index]
         ),
         height=max(
@@ -351,7 +353,7 @@ def build_navigation_drawer(page, selected_index):
         index = e.control.selected_index
 
         if 0 <= index < len(routes):
-            page.go(routes[index])
+            navigate(page, routes[index])
 
     cabang_label = (
         "Pusat"

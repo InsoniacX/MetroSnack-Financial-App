@@ -3,6 +3,8 @@ http_client.py — lapisan dasar komunikasi ke backend API MetroSnack.
 Semua modul db/*.py lain manggil lewat sini, supaya urusan header,
 token, dan error handling terpusat di satu tempat.
 """
+import logging
+
 import requests
 
 # URL dan timeout backend divalidasi melalui config.py.
@@ -15,6 +17,7 @@ from state import app_state
 
 TIMEOUT_SECONDS = API_TIMEOUT_SECONDS
 _SESSION = requests.Session()
+logger = logging.getLogger(__name__)
 
 
 class ApiError(Exception):
@@ -53,6 +56,24 @@ def _handle(resp):
             detail = body.get("detail", body)
         except Exception:
             detail = resp.text
+
+        request = getattr(resp, "request", None)
+        method = getattr(request, "method", "HTTP")
+        logger.warning(
+            "Backend request gagal: %s %s -> HTTP %s (%s)",
+            method,
+            resp.url,
+            resp.status_code,
+            detail,
+        )
+
+        if (
+            resp.status_code == 401
+            and app_state.user
+            and app_state.user.get("access_token")
+        ):
+            app_state.logout(session_expired=True)
+
         raise ApiError(resp.status_code, detail)
     if resp.status_code == 204 or not resp.content:
         return None
@@ -60,14 +81,24 @@ def _handle(resp):
 
 
 def _request(method, path, params=None, json_body=None):
-    response = _SESSION.request(
-        method=method,
-        url=f"{API_BASE_URL}{path}",
-        headers=_headers(),
-        params=params,
-        json=json_body,
-        timeout=TIMEOUT_SECONDS,
-    )
+    url = f"{API_BASE_URL}{path}"
+    try:
+        response = _SESSION.request(
+            method=method,
+            url=url,
+            headers=_headers(),
+            params=params,
+            json=json_body,
+            timeout=TIMEOUT_SECONDS,
+        )
+    except requests.RequestException:
+        logger.exception(
+            "Backend tidak dapat dihubungi: %s %s",
+            method,
+            url,
+        )
+        raise
+
     return _handle(response)
 
 

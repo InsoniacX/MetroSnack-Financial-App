@@ -1,6 +1,8 @@
 import flet as ft
 
 from components.appbar import is_mobile_layout
+from components.navigation import navigate
+from components.pagination import ClientPagination
 from db.cabang_repo import (
     cabang_name_exist,
     create_cabang,
@@ -89,7 +91,7 @@ def build_view(page: ft.Page):
                 ft.TextButton(
                     "Kembali ke Dashboard",
                     icon=ft.Icons.ARROW_BACK,
-                    on_click=lambda e: page.go("/dashboard"),
+                    on_click=lambda e: navigate(page, "/dashboard"),
                 ),
             ],
             spacing=8,
@@ -539,8 +541,15 @@ def build_view(page: ft.Page):
             ft.DataColumn(ft.Text("Status")),
             ft.DataColumn(ft.Text("Aksi")),
         ],
-        rows=rows,
+        rows=[],
     )
+
+    def render_cabang_page():
+        table.rows = cabang_pagination.paginate(rows)
+        page.update()
+
+    cabang_pagination = ClientPagination(render_cabang_page)
+    table.rows = cabang_pagination.paginate(rows)
 
     header = ft.ResponsiveRow(
         [
@@ -622,6 +631,7 @@ def build_view(page: ft.Page):
         table_controls.append(
             ft.Row([table], scroll=ft.ScrollMode.AUTO)
         )
+        table_controls.append(cabang_pagination.control)
         data_content = ft.Column(table_controls, spacing=8)
     else:
         data_content = ft.Text(

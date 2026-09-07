@@ -4,7 +4,9 @@ from decimal import Decimal
 import flet as ft
 
 from components.appbar import is_mobile_layout
+from components.file_picker import get_file_picker
 from components.metric_card import metric_card
+from components.pagination import ClientPagination
 from db.activity_repo import log_activity
 from db.cabang_repo import get_active_cabang
 from db.pendapatan_pengeluaran_repo import (
@@ -172,7 +174,7 @@ def build_view(page: ft.Page):
         if e:
             page.update()
 
-    form_jenis.on_change = update_kategori_options
+    form_jenis.on_select = update_kategori_options
     update_kategori_options()
 
     def submit_form(e):
@@ -465,6 +467,7 @@ def build_view(page: ft.Page):
         )
         filter_state["search"] = search_field.value or ""
 
+        table_pagination.reset()
         refresh_table_content()
 
     def reset_filter(e=None):
@@ -476,7 +479,7 @@ def build_view(page: ft.Page):
         apply_filter()
 
     search_field.on_submit = apply_filter
-    filter_sort_dropdown.on_change = apply_filter
+    filter_sort_dropdown.on_select = apply_filter
 
     filter_title = ft.Container(
         content=ft.Row(
@@ -560,11 +563,16 @@ def build_view(page: ft.Page):
     # Tabel dan metrik
     # ---------------------------------------------------------------------
     table_container = ft.Container()
+    table_state = {"items": [], "error_message": None}
+    table_pagination = ClientPagination(
+        lambda: refresh_table_content(fetch_data=False)
+    )
 
     def on_sort_tanggal(column_index, ascending):
         del column_index
         filter_state["sort_order"] = "asc" if ascending else "desc"
         filter_sort_dropdown.value = filter_state["sort_order"]
+        table_pagination.reset()
         refresh_table_content()
 
     def build_table_rows(items):
@@ -685,16 +693,22 @@ def build_view(page: ft.Page):
     metric_saldo_card = ft.Container(col={"xs": 12, "sm": 6, "md": 3})
     metric_count_card = ft.Container(col={"xs": 12, "sm": 6, "md": 3})
 
-    def refresh_table_content():
-        error_message = None
-        try:
-            items = get_filtered_data()
-        except Exception as error:
-            items = []
-            error_message = (
-                str(error).strip()
-                or "Terjadi kesalahan ketika mengambil data."
-            )
+    def refresh_table_content(fetch_data=True):
+        if fetch_data:
+            try:
+                table_state["items"] = get_filtered_data()
+                table_state["error_message"] = None
+            except Exception as error:
+                table_state["items"] = []
+                table_state["error_message"] = (
+                    str(error).strip()
+                    or "Terjadi kesalahan ketika mengambil data."
+                )
+
+        items = table_state["items"]
+        error_message = table_state["error_message"]
+
+        page_items = table_pagination.paginate(items)
 
         pendapatan_total = sum(
             (item["nominal"] for item in items if item["jenis"] == "Pendapatan"),
@@ -854,7 +868,7 @@ def build_view(page: ft.Page):
                 sort_column_index=0,
                 sort_ascending=filter_state["sort_order"] == "asc",
                 columns=columns,
-                rows=build_table_rows(items),
+                rows=build_table_rows(page_items),
                 border=ft.Border.all(
                     0.5,
                     ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_200,
@@ -878,6 +892,7 @@ def build_view(page: ft.Page):
             table_controls.append(
                 ft.Row([data_table], scroll=ft.ScrollMode.AUTO)
             )
+            table_controls.append(table_pagination.control)
             table_container.content = ft.Column(
                 table_controls,
                 spacing=6,
@@ -889,9 +904,7 @@ def build_view(page: ft.Page):
     # ---------------------------------------------------------------------
     # Ekspor PDF
     # ---------------------------------------------------------------------
-    export_picker = ft.FilePicker()
-    if export_picker not in page.services:
-        page.services.append(export_picker)
+    export_picker = get_file_picker(page, "pendapatan-pengeluaran")
 
     async def export_pdf(e):
         del e

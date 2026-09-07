@@ -2,6 +2,8 @@ import flet as ft
 from datetime import date
 
 from components.appbar import is_mobile_layout
+from components.file_picker import get_file_picker
+from components.navigation import navigate
 from utils.formatting import rp
 from utils.validation import require_text, parse_date, parse_positive_decimal
 from utils.pdf_export import generate_folder_pdf
@@ -78,7 +80,7 @@ def build_view(page: ft.Page, folder_id: int):
                 ft.TextButton(
                     "Kembali ke daftar invoice",
                     icon=ft.Icons.ARROW_BACK,
-                    on_click=lambda e: page.go("/invoices"),
+                    on_click=lambda e: navigate(page, "/invoices"),
                 ),
             ],
             spacing=8,
@@ -102,7 +104,7 @@ def build_view(page: ft.Page, folder_id: int):
                 ft.TextButton(
                     "Kembali ke daftar invoice",
                     icon=ft.Icons.ARROW_BACK,
-                    on_click=lambda e: page.go("/invoices"),
+                    on_click=lambda e: navigate(page, "/invoices"),
                 ),
             ],
             spacing=8,
@@ -350,7 +352,8 @@ def build_view(page: ft.Page, folder_id: int):
                                 ft.IconButton(
                                     ft.Icons.VISIBILITY,
                                     tooltip="Detail transaksi",
-                                    on_click=lambda e, iid=iid: page.go(
+                                    on_click=lambda e, iid=iid: navigate(
+                                        page,
                                         f"/invoice/{iid}"
                                     ),
                                 ),
@@ -464,7 +467,7 @@ def build_view(page: ft.Page, folder_id: int):
                 folder_cabang_id,
             )
             close_dialog()
-            page.go(f"/invoice/{iid}")
+            navigate(page, f"/invoice/{iid}")
         except ValueError as ve:
             page.show_dialog(
                 ft.SnackBar(
@@ -521,7 +524,7 @@ def build_view(page: ft.Page, folder_id: int):
         del e
         page.show_dialog(create_invoice_dlg)
 
-    export_picker = ft.FilePicker()
+    export_picker = get_file_picker(page, "invoice-folder")
 
     async def export_pdf(e):
         del e
@@ -531,10 +534,7 @@ def build_view(page: ft.Page, folder_id: int):
             invoices_with_transaksi = []
             for inv in invoices:
                 iid = inv[0]
-                try:
-                    transaksi = get_transaksi(iid)
-                except Exception:
-                    transaksi = []
+                transaksi = get_transaksi(iid)
                 invoices_with_transaksi.append(
                     {"header": inv, "transaksi": transaksi}
                 )
@@ -656,7 +656,7 @@ def build_view(page: ft.Page, folder_id: int):
                 ft.IconButton(
                     ft.Icons.ARROW_BACK,
                     tooltip="Kembali",
-                    on_click=lambda e: page.go(back_route),
+                    on_click=lambda e: navigate(page, back_route),
                 ),
                 ft.Column(
                     [

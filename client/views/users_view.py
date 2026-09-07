@@ -2,6 +2,8 @@ import flet as ft
 
 from state import app_state
 from components.appbar import is_mobile_layout
+from components.navigation import navigate
+from components.pagination import ClientPagination
 from db.http_client import ApiError
 from db.user_repo import (
     get_all_users,
@@ -89,7 +91,7 @@ def build_view(page: ft.Page):
                 ft.TextButton(
                     "Kembali ke Dashboard",
                     icon=ft.Icons.ARROW_BACK,
-                    on_click=lambda e: page.go("/dashboard"),
+                    on_click=lambda e: navigate(page, "/dashboard"),
                 ),
             ],
             spacing=8,
@@ -224,8 +226,53 @@ def build_view(page: ft.Page):
         "username": None,
         "role": None,
         "cabang_id": None,
+        "aktif": None,
     }
     delete_message = ft.Text("")
+    delete_blocked_message = ft.Text("")
+
+    def confirm_deactivate_after_delete(e):
+        del e
+        uid = delete_target["uid"]
+
+        if uid is None or not delete_target["aktif"]:
+            close_dialog()
+            return
+
+        page.pop_dialog()
+
+        try:
+            set_aktif(uid, False)
+            refresh()
+            page.show_dialog(
+                ft.SnackBar(
+                    ft.Text(
+                        f"User '{delete_target['username']}' berhasil "
+                        "dinonaktifkan."
+                    ),
+                    bgcolor=ft.Colors.GREEN_600,
+                )
+            )
+        except Exception as ex:
+            show_error("Gagal menonaktifkan user", ex)
+
+    delete_blocked_deactivate_button = ft.ElevatedButton(
+        "Nonaktifkan Akun",
+        icon=ft.Icons.PERSON_OFF,
+        on_click=confirm_deactivate_after_delete,
+    )
+
+    delete_blocked_dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("User Tidak Dapat Dihapus"),
+        content=delete_blocked_message,
+        inset_padding=12 if mobile else 40,
+        actions=[
+            ft.TextButton("Tutup", on_click=close_dialog),
+            delete_blocked_deactivate_button,
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
 
     def confirm_delete(e):
         del e
@@ -239,6 +286,28 @@ def build_view(page: ft.Page):
         try:
             delete_user(uid)
             refresh()
+        except ApiError as ex:
+            if ex.status_code != 409:
+                show_error("Gagal menghapus user", ex)
+                return
+
+            username = delete_target["username"]
+            if delete_target["aktif"]:
+                delete_blocked_message.value = (
+                    f"User '{username}' memiliki riwayat transaksi, sehingga "
+                    "datanya harus tetap disimpan. Nonaktifkan akun agar user "
+                    "tidak dapat masuk atau membuat transaksi baru."
+                )
+                delete_blocked_deactivate_button.visible = True
+            else:
+                delete_blocked_message.value = (
+                    f"User '{username}' memiliki riwayat transaksi dan sudah "
+                    "nonaktif. Akun tetap disimpan hanya untuk menjaga riwayat "
+                    "dan audit data."
+                )
+                delete_blocked_deactivate_button.visible = False
+
+            page.show_dialog(delete_blocked_dialog)
         except Exception as ex:
             show_error("Gagal menghapus user", ex)
 
@@ -261,6 +330,7 @@ def build_view(page: ft.Page):
 
     def request_delete(
         uid,
+        current_aktif,
         target_username,
         target_role,
         target_cabang_id,
@@ -280,12 +350,12 @@ def build_view(page: ft.Page):
                 "username": target_username,
                 "role": target_role,
                 "cabang_id": target_cabang_id,
+                "aktif": current_aktif,
             }
         )
         delete_message.value = (
             f"User '{target_username}' akan dihapus permanen. "
-            "Jika user memiliki riwayat data, backend akan menolak "
-            "penghapusan dan akun sebaiknya dinonaktifkan."
+            "Penghapusan hanya berhasil jika user belum memiliki riwayat data."
         )
         page.show_dialog(delete_dialog)
 
@@ -741,8 +811,8 @@ def build_view(page: ft.Page):
         toggle_action = lambda e, uid=uid, aktif=aktif, username=username, role=role, cid=user_cabang_id: request_toggle(
             uid, aktif, username, role, cid
         )
-        delete_action = lambda e, uid=uid, username=username, role=role, cid=user_cabang_id: request_delete(
-            uid, username, role, cid
+        delete_action = lambda e, uid=uid, aktif=aktif, username=username, role=role, cid=user_cabang_id: request_delete(
+            uid, aktif, username, role, cid
         )
 
         if mobile:
@@ -852,7 +922,14 @@ def build_view(page: ft.Page):
         ]
     )
 
-    table = ft.DataTable(columns=columns, rows=rows)
+    table = ft.DataTable(columns=columns, rows=[])
+
+    def render_user_page():
+        table.rows = user_pagination.paginate(rows)
+        page.update()
+
+    user_pagination = ClientPagination(render_user_page)
+    table.rows = user_pagination.paginate(rows)
 
     subtitle = (
         "Tambah, edit, nonaktifkan, atau hapus akun pengguna aplikasi."
@@ -940,6 +1017,7 @@ def build_view(page: ft.Page):
         table_controls.append(
             ft.Row([table], scroll=ft.ScrollMode.AUTO)
         )
+        table_controls.append(user_pagination.control)
         data_content = ft.Column(table_controls, spacing=8)
     else:
         data_content = ft.Text(

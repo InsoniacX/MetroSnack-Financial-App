@@ -2,7 +2,10 @@ import flet as ft
 from decimal import Decimal
 from datetime import date
 from components.appbar import build_appbar, is_mobile_layout, nav_rail
+from components.file_picker import get_file_picker
 from components.metric_card import metric_card
+from components.navigation import navigate
+from components.pagination import ClientPagination
 from utils.formatting import rp
 from utils.validation import parse_date, parse_positive_decimal
 from utils.hutang_style import hutang_style
@@ -200,7 +203,12 @@ def build_view(page: ft.Page, invoice_id: int):
             ]))
         return rows
 
-    table = table_build(transaksi)
+    def render_transaction_page():
+        table.rows = build_rows(transaction_pagination.paginate(transaksi))
+        page.update()
+
+    transaction_pagination = ClientPagination(render_transaction_page)
+    table = table_build(transaction_pagination.paginate(transaksi))
 
     tgl_field = ft.TextField(
         label="Tanggal (YYYY-MM-DD)",
@@ -327,7 +335,7 @@ def build_view(page: ft.Page, invoice_id: int):
         sisa_barang_field.value = str(sisa_barang_manual) if sisa_barang_manual is not None else "0"
         page.show_dialog(sisa_barang_dlg)
 
-    export_picker = ft.FilePicker()
+    export_picker = get_file_picker(page, "invoice-detail")
 
     async def export_pdf(e):
         nama_file_default = f"Invoice_{(no_laporan or str(invoice_id)).replace(' ', '_')}.pdf"
@@ -423,7 +431,7 @@ def build_view(page: ft.Page, invoice_id: int):
             [
                 ft.IconButton(
                     ft.Icons.ARROW_BACK,
-                    on_click=lambda e: page.go(back_route),
+                    on_click=lambda e: navigate(page, back_route),
                 ),
                 ft.Text(
                     "Detail Laporan Invoice",
@@ -495,6 +503,7 @@ def build_view(page: ft.Page, invoice_id: int):
     table_controls.append(
         ft.Row([table], scroll=ft.ScrollMode.AUTO)
     )
+    table_controls.append(transaction_pagination.control)
 
     body = ft.Column([
         ft.ResponsiveRow(

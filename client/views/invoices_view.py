@@ -2,6 +2,9 @@ import flet as ft
 from datetime import date
 from config import MONTH
 from components.appbar import build_appbar, is_mobile_layout, nav_rail
+from components.file_picker import get_file_picker
+from components.navigation import navigate
+from components.pagination import ClientPagination
 from utils.formatting import rp
 from utils.validation import parse_year, require_text, parse_date, parse_positive_decimal
 from utils.pdf_export import generate_cabang_pdf
@@ -48,7 +51,7 @@ def build_cabang_hub(page: ft.Page)-> ft.Control:
                         ft.Column([ft.Text("Laba bersih", size=11, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600), ft.Text(rp(laba_bersih), size=16, weight=ft.FontWeight.W_500)]),
                     ], spacing=24),
                     ft.Container(height=14),
-                    ft.ElevatedButton("Lihat invoice cabang ini", icon=ft.Icons.ARROW_FORWARD, on_click=lambda e, cid=cid: page.go(f"/invoices/cabang/{cid}"), bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE),
+                    ft.ElevatedButton("Lihat invoice cabang ini", icon=ft.Icons.ARROW_FORWARD, on_click=lambda e, cid=cid: navigate(page, f"/invoices/cabang/{cid}"), bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE),
                 ], spacing=4),
                 bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE,
                 border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_300),
@@ -57,11 +60,21 @@ def build_cabang_hub(page: ft.Page)-> ft.Control:
             )
         )
 
+    all_cabang_cards = list(cabang_cards.controls)
+
+    def render_cabang_page():
+        cabang_cards.controls = cabang_pagination.paginate(all_cabang_cards)
+        page.update()
+
+    cabang_pagination = ClientPagination(render_cabang_page)
+    cabang_cards.controls = cabang_pagination.paginate(all_cabang_cards)
+
     body = ft.Column([
         ft.Text("Pilih cabang", size=20, weight=ft.FontWeight.W_500),
         ft.Text("Klik salah satu cabang untuk melihat daftar invoicenya.", size=13, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600),
         ft.Container(height=16),
         cabang_cards if cabang_summary else ft.Text("Belum ada cabang aktif. Tambahkan cabang lewat menu Cabang.", color=ft.Colors.GREY_600),
+        cabang_pagination.control,
     ], scroll=ft.ScrollMode.AUTO, expand=True)
     return body
     # return ft.View(
@@ -106,7 +119,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
                 ft.TextButton(
                     "Kembali ke daftar invoice",
                     icon=ft.Icons.ARROW_BACK,
-                    on_click=lambda e: page.go("/invoices"),
+                    on_click=lambda e: navigate(page, "/invoices"),
                 ),
             ],
             spacing=8,
@@ -217,7 +230,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
                         ft.Column([ft.Text("Laba bersih", size=11, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600), ft.Text(rp(laba_bersih), size=16, weight=ft.FontWeight.W_500)]),
                     ], spacing=24),
                     ft.Container(height=8),
-                    ft.ElevatedButton("Buka folder", icon=ft.Icons.FOLDER_OPEN, on_click=lambda e, fid=fid: page.go(f"/invoices/{fid}")),
+                    ft.ElevatedButton("Buka folder", icon=ft.Icons.FOLDER_OPEN, on_click=lambda e, fid=fid: navigate(page, f"/invoices/{fid}")),
                 ], spacing=4),
                 bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE,
                 border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_300),
@@ -225,6 +238,15 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
                 padding=16,
             )
         )
+
+    all_folder_cards = list(folder_cards.controls)
+
+    def render_folder_page():
+        folder_cards.controls = folder_pagination.paginate(all_folder_cards)
+        page.update()
+
+    folder_pagination = ClientPagination(render_folder_page)
+    folder_cards.controls = folder_pagination.paginate(all_folder_cards)
 
     bulan_dd = ft.Dropdown(
         label="Bulan",
@@ -294,7 +316,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
             log_activity(actor["id"], actor["username"], "CREATE", "invoice", iid, f"Membuat invoice {no_laporan} di {nama_folder}", cabang_id)
             page.pop_dialog()
             page.update()
-            page.go(f"/invoice/{iid}")
+            navigate(page, f"/invoice/{iid}")
         except Exception as ex:
             # Folder sudah terlanjur dibuat, tapi invoice gagal -- folder
             # ini sementara jadi 0-invoice, tetap bisa diakses lewat
@@ -347,7 +369,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
         page.show_dialog(dlg)
 
     # ---------- Export PDF Cabang (BARU): rekap semua folder/bulan sekaligus ----------
-    export_picker = ft.FilePicker()
+    export_picker = get_file_picker(page, "invoice-cabang")
 
     async def export_cabang_pdf(e):
         if not folders:
@@ -368,10 +390,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
                 invoices_with_transaksi = []
                 for inv in invoices:
                     iid = inv[0]
-                    try:
-                        transaksi = get_transaksi(iid)
-                    except Exception:
-                        transaksi = []
+                    transaksi = get_transaksi(iid)
                     invoices_with_transaksi.append({"header": inv, "transaksi": transaksi})
                 folders_data.append({"nama_folder": nama_folder, "invoices_with_transaksi": invoices_with_transaksi})
                 
@@ -408,7 +427,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
         header_title_controls.append(
             ft.IconButton(
                 ft.Icons.ARROW_BACK,
-                on_click=lambda e: page.go("/invoices"),
+                on_click=lambda e: navigate(page, "/invoices"),
             )
         )
     header_title_controls.append(
@@ -461,6 +480,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
         ),
         ft.Container(height=16),
         folder_cards if folders else ft.Text("Belum ada folder bulan. Buat folder baru untuk mulai.", color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600),
+        folder_pagination.control,
     ], scroll=ft.ScrollMode.AUTO, expand=True)
 
     return body

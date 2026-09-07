@@ -2,6 +2,7 @@ import flet as ft
 import flet_charts as fc
 from config import MONTH
 from components.metric_card import metric_card
+from components.navigation import navigate
 from utils.formatting import rp
 from utils.hutang_style import hutang_style
 from db.folder_repo import get_dashboard_summary, get_monthly_trend, get_cabang_breakdown
@@ -162,13 +163,16 @@ def _error_panel(page, title, message):
                 ft.OutlinedButton(
                     "Coba lagi",
                     icon=ft.Icons.REFRESH,
-                    on_click=lambda e: page.go(page.route or "/dashboard"),
+                    on_click=lambda e: navigate(
+                        page,
+                        page.route or "/dashboard",
+                    ),
                 ),
             ],
             spacing=10,
             horizontal_alignment=ft.CrossAxisAlignment.START,
         ),
-        bgcolor=ft.Colors.RED_950 if is_dark else ft.Colors.RED_50,
+        bgcolor=ft.Colors.RED_900 if is_dark else ft.Colors.RED_50,
         border=ft.Border.all(
             0.8,
             ft.Colors.RED_800 if is_dark else ft.Colors.RED_200,
@@ -284,7 +288,7 @@ def build_view(page: ft.Page):
             border_radius=12, padding=16,
         ),
         ft.Container(height=24),
-        ft.ElevatedButton("Lihat daftar invoice", icon=ft.Icons.ARROW_FORWARD, on_click=lambda e: page.go("/invoices")),
+        ft.ElevatedButton("Lihat daftar invoice", icon=ft.Icons.ARROW_FORWARD, on_click=lambda e: navigate(page, "/invoices")),
     ])
 
     body = ft.Column(body_controls, spacing=6, expand=True, scroll=ft.ScrollMode.AUTO)

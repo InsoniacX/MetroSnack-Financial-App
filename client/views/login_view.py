@@ -1,6 +1,7 @@
 import flet as ft
 
 from config import APP_TITLE
+from components.navigation import navigate
 from state import app_state
 from db.auth_repo import authenticate_user, AccountLockedError
 from db.activity_repo import log_activity
@@ -10,9 +11,10 @@ def build_view(page: ft.Page):
     page_height = getattr(page, "height", None) or 750
     compact_height = page_height < 600
 
-    logo_size = 96 if compact_height else 180
-    vertical_padding = 8 if compact_height else 24
-    form_spacing = 6 if compact_height else 10
+    logo_size = 72 if compact_height else 180
+    vertical_padding = 4 if compact_height else 24
+    form_spacing = 4 if compact_height else 10
+    session_expired = app_state.consume_session_expired()
 
     username_field = ft.TextField(
         label="Username",
@@ -101,7 +103,7 @@ def build_view(page: ft.Page):
         except Exception:
             pass
 
-        page.go("/dashboard")
+        navigate(page, "/dashboard")
 
     login_button.on_click = do_login
     password_field.on_submit = do_login
@@ -125,18 +127,31 @@ def build_view(page: ft.Page):
                 ),
                 ft.Text(
                     APP_TITLE,
-                    size=20 if compact_height else 22,
+                    size=18 if compact_height else 22,
                     weight=ft.FontWeight.W_500,
                     text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Text(
                     "Masuk untuk melanjutkan",
-                    size=12 if compact_height else 13,
+                    size=11 if compact_height else 13,
                     color=ft.Colors.GREY_600,
                     text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Container(
                     height=0 if compact_height else 12
+                ),
+                ft.Container(
+                    content=ft.Text(
+                        "Sesi Anda telah berakhir. Silakan login kembali.",
+                        size=12,
+                        color=ft.Colors.ORANGE_900,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    bgcolor=ft.Colors.ORANGE_50,
+                    border=ft.Border.all(0.8, ft.Colors.ORANGE_200),
+                    border_radius=8,
+                    padding=10,
+                    visible=session_expired,
                 ),
                 username_field,
                 password_field,

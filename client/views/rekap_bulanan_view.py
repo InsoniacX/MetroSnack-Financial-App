@@ -5,7 +5,9 @@ import flet as ft
 import flet_charts as fc
 
 from components.appbar import is_mobile_layout
+from components.file_picker import get_file_picker
 from components.metric_card import metric_card
+from components.pagination import ClientPagination
 from config import MONTH
 from db.activity_repo import log_activity
 from db.cabang_repo import get_active_cabang
@@ -117,10 +119,12 @@ def build_view(page: ft.Page):
         filter_state["tahun"] = int(
             filter_tahun_dropdown.value or today.year
         )
+        for pagination in detail_paginations.values():
+            pagination.reset()
         refresh_rekap()
 
-    filter_bulan_dropdown.on_change = apply_filter
-    filter_tahun_dropdown.on_change = apply_filter
+    filter_bulan_dropdown.on_select = apply_filter
+    filter_tahun_dropdown.on_select = apply_filter
 
     filter_title = ft.Container(
         content=ft.Row(
@@ -195,6 +199,31 @@ def build_view(page: ft.Page):
     detail_pabrik_container = ft.Container()
     detail_balaraja_container = ft.Container()
 
+    rekap_state = {
+        "loaded": False,
+        "load_error": None,
+        "kenek_items": [],
+        "pabrik_items": [],
+        "balaraja_items": [],
+    }
+    detail_rows = {"kenek": [], "pabrik": [], "balaraja": []}
+    detail_tables = {}
+
+    def render_detail_page(detail_name):
+        data_table = detail_tables.get(detail_name)
+        if data_table is None:
+            return
+        data_table.rows = detail_paginations[detail_name].paginate(
+            detail_rows[detail_name]
+        )
+        page.update()
+
+    detail_paginations = {
+        "kenek": ClientPagination(lambda: render_detail_page("kenek")),
+        "pabrik": ClientPagination(lambda: render_detail_page("pabrik")),
+        "balaraja": ClientPagination(lambda: render_detail_page("balaraja")),
+    }
+
     def table_with_horizontal_scroll(data_table):
         controls = []
         if mobile:
@@ -219,6 +248,46 @@ def build_view(page: ft.Page):
             ),
             padding=state_padding,
             alignment=ft.Alignment.CENTER,
+        )
+
+    def load_error_content(message):
+        return ft.Container(
+            content=ft.Column(
+                [
+                    ft.Icon(
+                        ft.Icons.ERROR_OUTLINE,
+                        size=42,
+                        color=ft.Colors.RED_400,
+                    ),
+                    ft.Text(
+                        "Data rekap bulanan gagal dimuat",
+                        size=15,
+                        weight=ft.FontWeight.W_600,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    ft.Text(
+                        message,
+                        size=12,
+                        color=ft.Colors.GREY_500,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    ft.OutlinedButton(
+                        "Coba Lagi",
+                        icon=ft.Icons.REFRESH,
+                        on_click=lambda e: refresh_rekap(),
+                    ),
+                ],
+                spacing=8,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            alignment=ft.Alignment.CENTER,
+            padding=state_padding,
+            border=ft.Border.all(
+                0.8,
+                ft.Colors.RED_800 if is_dark else ft.Colors.RED_200,
+            ),
+            border_radius=10,
+            bgcolor=ft.Colors.RED_900 if is_dark else ft.Colors.RED_50,
         )
 
     def build_comparison_chart(kenek_sum, pabrik_sum, balaraja_sum):
@@ -420,38 +489,79 @@ def build_view(page: ft.Page):
                 tahun=year,
                 sort_order="desc",
             )
-        except Exception:
-            kenek_items = []
-        kenek_sum = sum(
-            (item["nominal"] for item in kenek_items),
-            Decimal(0),
-        )
-        kenek_count = len(kenek_items)
-
-        try:
             pabrik_items = get_pengambilan_pabrik(
                 cabang_id=cabang_id,
                 bulan=month,
                 tahun=year,
                 sort_order="desc",
             )
-        except Exception:
-            pabrik_items = []
-        pabrik_sum = sum(
-            (item["nominal"] for item in pabrik_items),
-            Decimal(0),
-        )
-        pabrik_count = len(pabrik_items)
-
-        try:
             balaraja_items = get_pengambilan_balaraja(
                 cabang_id=cabang_id,
                 bulan=month,
                 tahun=year,
                 sort_order="desc",
             )
-        except Exception:
-            balaraja_items = []
+        except Exception as error:
+            rekap_state.update(
+                {
+                    "loaded": False,
+                    "load_error": error,
+                    "kenek_items": [],
+                    "pabrik_items": [],
+                    "balaraja_items": [],
+                }
+            )
+
+            for container, title in (
+                (metric_kenek_card, f"Operasional Mobil ({month_name})"),
+                (metric_pabrik_card, f"Pengambilan Pabrik ({month_name})"),
+                (metric_balaraja_card, f"Pengambilan Balaraja ({month_name})"),
+                (metric_grand_card, "Grand Total Pengeluaran"),
+            ):
+                container.content = metric_card(page, title, "-")
+
+            error_message = (
+                "Salah satu sumber data tidak dapat diambil. "
+                "Angka dan laporan tidak ditampilkan agar tidak terbaca "
+                "sebagai nilai nol. Periksa koneksi lalu coba lagi."
+            )
+            chart_container.content = load_error_content(error_message)
+            breakdown_table_container.content = load_error_content(error_message)
+            detail_kenek_container.content = load_error_content(error_message)
+            detail_pabrik_container.content = load_error_content(error_message)
+            detail_balaraja_container.content = load_error_content(error_message)
+            detail_tables.clear()
+            for detail_name, pagination in detail_paginations.items():
+                detail_rows[detail_name] = []
+                pagination.reset()
+                pagination.paginate([])
+
+            if page.views:
+                page.update()
+            return
+
+        rekap_state.update(
+            {
+                "loaded": True,
+                "load_error": None,
+                "kenek_items": kenek_items,
+                "pabrik_items": pabrik_items,
+                "balaraja_items": balaraja_items,
+            }
+        )
+
+        kenek_sum = sum(
+            (item["nominal"] for item in kenek_items),
+            Decimal(0),
+        )
+        kenek_count = len(kenek_items)
+
+        pabrik_sum = sum(
+            (item["nominal"] for item in pabrik_items),
+            Decimal(0),
+        )
+        pabrik_count = len(pabrik_items)
+
         balaraja_sum = sum(
             (item["nominal"] for item in balaraja_items),
             Decimal(0),
@@ -749,6 +859,9 @@ def build_view(page: ft.Page):
 
         # Rincian operasional mobil
         if not kenek_items:
+            detail_rows["kenek"] = []
+            detail_tables.pop("kenek", None)
+            detail_paginations["kenek"].paginate([])
             detail_kenek_container.content = empty_detail(
                 "Tidak ada catatan operasional mobil pada bulan ini."
             )
@@ -811,9 +924,10 @@ def build_view(page: ft.Page):
                 ]
             )
 
+            detail_rows["kenek"] = rows
             data_table = ft.DataTable(
                 columns=columns,
-                rows=rows,
+                rows=detail_paginations["kenek"].paginate(rows),
                 border=ft.Border.all(
                     0.5,
                     ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_200,
@@ -823,12 +937,20 @@ def build_view(page: ft.Page):
                     ft.Colors.GREY_800 if is_dark else ft.Colors.GREY_100
                 ),
             )
-            detail_kenek_container.content = table_with_horizontal_scroll(
-                data_table
+            detail_tables["kenek"] = data_table
+            detail_kenek_container.content = ft.Column(
+                [
+                    table_with_horizontal_scroll(data_table),
+                    detail_paginations["kenek"].control,
+                ],
+                spacing=6,
             )
 
         # Rincian pengambilan pabrik
         if not pabrik_items:
+            detail_rows["pabrik"] = []
+            detail_tables.pop("pabrik", None)
+            detail_paginations["pabrik"].paginate([])
             detail_pabrik_container.content = empty_detail(
                 "Tidak ada data pengambilan pabrik pada bulan ini."
             )
@@ -887,9 +1009,10 @@ def build_view(page: ft.Page):
                 ]
             )
 
+            detail_rows["pabrik"] = rows
             data_table = ft.DataTable(
                 columns=columns,
-                rows=rows,
+                rows=detail_paginations["pabrik"].paginate(rows),
                 border=ft.Border.all(
                     0.5,
                     ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_200,
@@ -899,12 +1022,20 @@ def build_view(page: ft.Page):
                     ft.Colors.GREY_800 if is_dark else ft.Colors.GREY_100
                 ),
             )
-            detail_pabrik_container.content = table_with_horizontal_scroll(
-                data_table
+            detail_tables["pabrik"] = data_table
+            detail_pabrik_container.content = ft.Column(
+                [
+                    table_with_horizontal_scroll(data_table),
+                    detail_paginations["pabrik"].control,
+                ],
+                spacing=6,
             )
 
         # Rincian pengambilan Balaraja
         if not balaraja_items:
+            detail_rows["balaraja"] = []
+            detail_tables.pop("balaraja", None)
+            detail_paginations["balaraja"].paginate([])
             detail_balaraja_container.content = empty_detail(
                 "Tidak ada data pengambilan Balaraja pada bulan ini."
             )
@@ -963,9 +1094,10 @@ def build_view(page: ft.Page):
                 ]
             )
 
+            detail_rows["balaraja"] = rows
             data_table = ft.DataTable(
                 columns=columns,
-                rows=rows,
+                rows=detail_paginations["balaraja"].paginate(rows),
                 border=ft.Border.all(
                     0.5,
                     ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_200,
@@ -975,8 +1107,13 @@ def build_view(page: ft.Page):
                     ft.Colors.GREY_800 if is_dark else ft.Colors.GREY_100
                 ),
             )
-            detail_balaraja_container.content = table_with_horizontal_scroll(
-                data_table
+            detail_tables["balaraja"] = data_table
+            detail_balaraja_container.content = ft.Column(
+                [
+                    table_with_horizontal_scroll(data_table),
+                    detail_paginations["balaraja"].control,
+                ],
+                spacing=6,
             )
 
         if page.views:
@@ -985,40 +1122,29 @@ def build_view(page: ft.Page):
     # ---------------------------------------------------------------------
     # Ekspor PDF
     # ---------------------------------------------------------------------
-    export_picker = ft.FilePicker()
-    if export_picker not in page.services:
-        page.services.append(export_picker)
+    export_picker = get_file_picker(page, "rekap-bulanan")
 
     async def export_pdf(e):
         del e
         month = filter_state["bulan"]
         year = filter_state["tahun"]
-        cabang_id = filter_state["cabang_id"]
         month_name = MONTH[month]
 
-        try:
-            kenek_items = get_pengeluaran_supir_kenek(
-                cabang_id=cabang_id,
-                bulan=month,
-                tahun=year,
-                sort_order="desc",
+        if not rekap_state["loaded"] or rekap_state["load_error"] is not None:
+            page.show_dialog(
+                ft.SnackBar(
+                    ft.Text(
+                        "PDF tidak dapat dibuat karena data rekap belum "
+                        "berhasil dimuat seluruhnya. Tekan Coba Lagi dahulu."
+                    ),
+                    bgcolor=ft.Colors.RED_400,
+                )
             )
-            pabrik_items = get_pengambilan_pabrik(
-                cabang_id=cabang_id,
-                bulan=month,
-                tahun=year,
-                sort_order="desc",
-            )
-            balaraja_items = get_pengambilan_balaraja(
-                cabang_id=cabang_id,
-                bulan=month,
-                tahun=year,
-                sort_order="desc",
-            )
-        except Exception:
-            kenek_items = []
-            pabrik_items = []
-            balaraja_items = []
+            return
+
+        kenek_items = rekap_state["kenek_items"]
+        pabrik_items = rekap_state["pabrik_items"]
+        balaraja_items = rekap_state["balaraja_items"]
 
         if not kenek_items and not pabrik_items and not balaraja_items:
             page.show_dialog(

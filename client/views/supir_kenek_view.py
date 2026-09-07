@@ -4,7 +4,9 @@ from decimal import Decimal
 import flet as ft
 
 from components.appbar import is_mobile_layout
+from components.file_picker import get_file_picker
 from components.metric_card import metric_card
+from components.pagination import ClientPagination
 from db.activity_repo import log_activity
 from db.cabang_repo import get_active_cabang
 from db.supir_kenek_repo import (
@@ -86,6 +88,11 @@ def build_view(page: ft.Page):
 
     exp_supir_dropdown = ft.Dropdown(
         label="Supir *",
+        hint_text=(
+            "Pilih cabang terlebih dahulu"
+            if is_pusat
+            else "Pilih supir"
+        ),
         options=[
             ft.dropdown.Option(str(person["id"]), person["nama"])
             for person in personel_cached
@@ -249,6 +256,17 @@ def build_view(page: ft.Page):
 
         no_available_personel = not valid_personel_ids
 
+        if target_cabang_id is None:
+            exp_supir_dropdown.helper_text = (
+                "Pilih cabang untuk menampilkan Supir/Kenek."
+            )
+        elif no_available_personel:
+            exp_supir_dropdown.helper_text = (
+                "Belum ada Supir/Kenek aktif di cabang ini."
+            )
+        else:
+            exp_supir_dropdown.helper_text = None
+
         exp_supir_dropdown.disabled = (
             target_cabang_id is None
             or no_available_personel
@@ -262,11 +280,9 @@ def build_view(page: ft.Page):
         update_exp_personel_options(
             e.control.value
         )
+        page.update()
 
-        if page.views:
-            page.update()
-
-    exp_cabang_dropdown.on_change = (
+    exp_cabang_dropdown.on_select = (
         on_exp_cabang_change
     )
 
@@ -505,15 +521,17 @@ def build_view(page: ft.Page):
         weight=ft.FontWeight.W_500,
     )
 
-    exp_form_controls = [
-        exp_tanggal,
-        exp_uang_jalan,
-        exp_supir_dropdown,
-        exp_kenek_dropdown,
-        exp_keterangan,
-    ]
+    exp_form_controls = [exp_tanggal]
     if is_pusat:
         exp_form_controls.append(exp_cabang_dropdown)
+    exp_form_controls.extend(
+        [
+            exp_uang_jalan,
+            exp_supir_dropdown,
+            exp_kenek_dropdown,
+            exp_keterangan,
+        ]
+    )
 
     exp_dialog = ft.AlertDialog(
         modal=True,
@@ -630,6 +648,26 @@ def build_view(page: ft.Page):
             return
 
         page.show_dialog(exp_dialog)
+
+    # ---------------------------------------------------------------------
+    # Dialog tambah dan edit master personel
+    # ---------------------------------------------------------------------
+    personel_id_target = {"id": None}
+
+    personel_nama = ft.TextField(
+        label="Nama Lengkap Supir / Kenek *",
+        col={"xs": 12},
+    )
+
+    personel_cabang_dropdown = ft.Dropdown(
+        label="Cabang Penugasan",
+        options=[
+            ft.dropdown.Option(str(cabang[0]), cabang[1])
+            for cabang in cabang_list
+        ],
+        value=None,
+        col={"xs": 12},
+    )
 
     def submit_personel_form(e):
         del e
@@ -926,6 +964,7 @@ def build_view(page: ft.Page):
             search_field.value or ""
         ).strip()
 
+        exp_pagination.reset()
         refresh_table_content()
 
     def reset_filter(e=None):
@@ -938,8 +977,8 @@ def build_view(page: ft.Page):
         apply_filter()
 
     search_field.on_submit = apply_filter
-    filter_sort_dropdown.on_change = apply_filter
-    filter_personel_dropdown.on_change = apply_filter
+    filter_sort_dropdown.on_select = apply_filter
+    filter_personel_dropdown.on_select = apply_filter
 
     filter_title = ft.Container(
         content=ft.Row(
@@ -1034,11 +1073,18 @@ def build_view(page: ft.Page):
         "items": [],
         "load_error": None,
     }
+    exp_pagination = ClientPagination(
+        lambda: refresh_table_content(fetch_data=False)
+    )
+    personel_pagination = ClientPagination(
+        lambda: refresh_personel_table()
+    )
 
     def on_sort_exp_tanggal(column_index, ascending):
         del column_index
         filter_state["sort_order"] = "asc" if ascending else "desc"
         filter_sort_dropdown.value = filter_state["sort_order"]
+        exp_pagination.reset()
         refresh_table_content()
 
     def build_exp_table_rows(items):
@@ -1131,31 +1177,33 @@ def build_view(page: ft.Page):
 
         return rows
 
-    def refresh_table_content():
-        try:
-            items = get_pengeluaran_supir_kenek(
-                cabang_id=filter_state["cabang_id"],
-                start_date=filter_state["start_date"],
-                end_date=filter_state["end_date"],
-                personel_id=filter_state["personel_id"],
-                search=filter_state["search"],
-                sort_order=filter_state["sort_order"],
-            )
-
-            table_state["items"] = items
-            table_state["load_error"] = None
-
-        except Exception as error:
-            items = []
-            table_state["items"] = []
-            table_state["load_error"] = str(error)
-
-            page.show_dialog(
-                ft.SnackBar(
-                    ft.Text(f"Error memuat data: {error}"),
-                    bgcolor=ft.Colors.RED_400,
+    def refresh_table_content(fetch_data=True):
+        if fetch_data:
+            try:
+                table_state["items"] = get_pengeluaran_supir_kenek(
+                    cabang_id=filter_state["cabang_id"],
+                    start_date=filter_state["start_date"],
+                    end_date=filter_state["end_date"],
+                    personel_id=filter_state["personel_id"],
+                    search=filter_state["search"],
+                    sort_order=filter_state["sort_order"],
                 )
-            )
+                table_state["load_error"] = None
+
+            except Exception as error:
+                table_state["items"] = []
+                table_state["load_error"] = str(error)
+
+                page.show_dialog(
+                    ft.SnackBar(
+                        ft.Text(f"Error memuat data: {error}"),
+                        bgcolor=ft.Colors.RED_400,
+                    )
+                )
+
+        items = table_state["items"]
+
+        page_items = exp_pagination.paginate(items)
 
         total_sum = sum(
             (item["uang_jalan"] for item in items),
@@ -1324,7 +1372,7 @@ def build_view(page: ft.Page):
                     filter_state["sort_order"] == "asc"
                 ),
                 columns=columns,
-                rows=build_exp_table_rows(items),
+                rows=build_exp_table_rows(page_items),
                 border=ft.Border.all(
                     0.5,
                     (
@@ -1360,6 +1408,7 @@ def build_view(page: ft.Page):
                     scroll=ft.ScrollMode.AUTO,
                 )
             )
+            table_controls.append(exp_pagination.control)
 
             table_exp_container.content = ft.Column(
                 table_controls,
@@ -1371,6 +1420,9 @@ def build_view(page: ft.Page):
 
     def refresh_personel_table():
         personel_list = list(personel_all_cached)
+        page_personel = personel_pagination.paginate(
+            personel_list
+        )
         personel_table_error = (
             personel_load_error["message"]
         )
@@ -1456,7 +1508,7 @@ def build_view(page: ft.Page):
 
         else:
             rows = []
-            for person in personel_list:
+            for person in page_personel:
                 is_active = person.get("aktif", True)
                 registered_date = (
                     person["created_at"].strftime("%d-%m-%Y")
@@ -1609,6 +1661,7 @@ def build_view(page: ft.Page):
             table_controls.append(
                 ft.Row([data_table], scroll=ft.ScrollMode.AUTO)
             )
+            table_controls.append(personel_pagination.control)
             table_personel_container.content = ft.Column(
                 table_controls,
                 spacing=6,
@@ -1621,9 +1674,7 @@ def build_view(page: ft.Page):
     # ---------------------------------------------------------------------
     # Ekspor PDF
     # ---------------------------------------------------------------------
-    export_picker = ft.FilePicker()
-    if export_picker not in page.services:
-        page.services.append(export_picker)
+    export_picker = get_file_picker(page, "supir-kenek")
 
     async def export_pdf(e):
         del e
@@ -1958,4 +2009,3 @@ def build_view(page: ft.Page):
         scroll=ft.ScrollMode.AUTO,
         expand=True,
     )
-

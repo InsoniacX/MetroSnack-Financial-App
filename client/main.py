@@ -8,6 +8,8 @@ from components.appbar import (
     is_mobile_layout,
     nav_rail,
 )
+from components.skeleton import build_page_skeleton
+from components.navigation import navigate
 from config import APP_TITLE
 from db.folder_repo import get_invoice_ids
 from db.http_client import ApiError
@@ -29,37 +31,6 @@ from views import (
 )
 
 
-def _loading_view(route):
-    """Tampilan transisi ketika aplikasi menunggu data dari API."""
-    return ft.View(
-        route=route,
-        controls=[
-            ft.Container(
-                content=ft.Column(
-                    [
-                        ft.ProgressRing(
-                            width=32,
-                            height=32,
-                        ),
-                        ft.Container(height=12),
-                        ft.Text(
-                            "Memuat...",
-                            size=13,
-                            color=ft.Colors.GREY_600,
-                        ),
-                    ],
-                    horizontal_alignment=(
-                        ft.CrossAxisAlignment.CENTER
-                    ),
-                ),
-                alignment=ft.Alignment.CENTER,
-                expand=True,
-            )
-        ],
-        vertical_alignment=ft.MainAxisAlignment.CENTER,
-    )
-
-
 def _parse_positive_route_id(route, prefix):
     """Ambil satu ID positif dari route tanpa menerima segmen tambahan."""
     if not route.startswith(prefix):
@@ -71,6 +42,34 @@ def _parse_positive_route_id(route, prefix):
 
     parsed = int(value)
     return parsed if parsed > 0 else None
+
+
+def _get_route_title(route):
+    if route == "/dashboard":
+        return "Dashboard"
+    if route == "/invoices" or route.startswith("/invoices/cabang/"):
+        return "Daftar Invoice"
+    if route.startswith("/invoices/"):
+        return "Detail Folder"
+    if route.startswith("/invoice/"):
+        return "Detail Invoice"
+    if route.startswith("/pendapatan-pengeluaran"):
+        return "Pendapatan & Pengeluaran"
+    if route.startswith("/supir-kenek"):
+        return "Operasional Supir & Kenek"
+    if route.startswith("/pengambilan-pabrik"):
+        return "Pengambilan Pabrik"
+    if route.startswith("/pengambilan-balaraja"):
+        return "Pengambilan Balaraja"
+    if route.startswith("/rekap-bulanan"):
+        return "Rekap Bulanan Gabungan"
+    if route == "/users":
+        return "Kelola User"
+    if route == "/activity-log":
+        return "Log Aktivitas"
+    if route == "/cabang":
+        return "Kelola Cabang"
+    return None
 
 
 async def main(page: ft.Page):
@@ -213,7 +212,8 @@ async def main(page: ft.Page):
                         ft.OutlinedButton(
                             "Kembali",
                             icon=ft.Icons.ARROW_BACK,
-                            on_click=lambda e: page.go(
+                            on_click=lambda e: navigate(
+                                page,
                                 back_route
                             ),
                         ),
@@ -235,12 +235,12 @@ async def main(page: ft.Page):
 
     def redirect_for_api_error(error):
         if error.status_code == 401:
-            app_state.logout()
-            page.go("/login")
+            app_state.logout(session_expired=True)
+            navigate(page, "/login")
             return True
 
         if error.status_code in (403, 404):
-            page.go("/invoices")
+            navigate(page, "/invoices")
             return True
 
         return False
@@ -252,7 +252,7 @@ async def main(page: ft.Page):
 
         if not app_state.is_logged_in():
             if current_route != "/login":
-                page.go("/login")
+                navigate(page, "/login")
                 return
 
             page.views.clear()
@@ -263,7 +263,7 @@ async def main(page: ft.Page):
             return
 
         if current_route == "/login":
-            page.go("/dashboard")
+            navigate(page, "/dashboard")
             return
 
         actor = app_state.user or {}
@@ -285,7 +285,7 @@ async def main(page: ft.Page):
             )
             and not show_ops
         ):
-            page.go("/dashboard")
+            navigate(page, "/dashboard")
             return
 
         if (
@@ -293,14 +293,14 @@ async def main(page: ft.Page):
             in ("/users", "/activity-log")
             and not is_admin
         ):
-            page.go("/dashboard")
+            navigate(page, "/dashboard")
             return
 
         if (
             current_route == "/cabang"
             and not (is_admin and is_pusat)
         ):
-            page.go("/dashboard")
+            navigate(page, "/dashboard")
             return
 
         if (
@@ -309,12 +309,24 @@ async def main(page: ft.Page):
             )
             and not is_pusat
         ):
-            page.go("/invoices")
+            navigate(page, "/invoices")
             return
 
         if current_route == "/":
-            page.go("/dashboard")
+            navigate(page, "/dashboard")
             return
+
+        loading_title = _get_route_title(current_route)
+        if loading_title:
+            page.views.clear()
+            page.views.append(
+                create_view(
+                    current_route,
+                    loading_title,
+                    build_page_skeleton(page, current_route),
+                )
+            )
+            page.update()
 
         if current_route == "/dashboard":
             body = dashboard_view.build_view(page)
@@ -343,7 +355,7 @@ async def main(page: ft.Page):
             )
 
             if cabang_id is None:
-                page.go("/invoices")
+                navigate(page, "/invoices")
                 return
 
             body = invoices_view.build_folder_list(
@@ -366,13 +378,8 @@ async def main(page: ft.Page):
             )
 
             if folder_id is None:
-                page.go("/invoices")
+                navigate(page, "/invoices")
                 return
-
-            page.views.append(
-                _loading_view(current_route)
-            )
-            page.update()
 
             invoice_ids = None
             load_error = None
@@ -383,8 +390,6 @@ async def main(page: ft.Page):
                 )
             except Exception as ex:
                 load_error = ex
-
-            page.views.pop()
 
             if isinstance(load_error, ApiError):
                 if redirect_for_api_error(load_error):
@@ -406,7 +411,8 @@ async def main(page: ft.Page):
                 )
 
             elif len(invoice_ids) == 1:
-                page.go(
+                navigate(
+                    page,
                     f"/invoice/{invoice_ids[0]}"
                 )
                 return
@@ -430,7 +436,7 @@ async def main(page: ft.Page):
             )
 
             if invoice_id is None:
-                page.go("/invoices")
+                navigate(page, "/invoices")
                 return
 
             try:
@@ -559,7 +565,11 @@ async def main(page: ft.Page):
             )
 
         else:
-            page.go("/dashboard")
+            navigate(page, "/dashboard")
+            return
+
+        if not app_state.is_logged_in():
+            navigate(page, "/login")
             return
 
         page.views.clear()
@@ -584,7 +594,7 @@ async def main(page: ft.Page):
             return
 
         page.views.pop()
-        page.go(page.views[-1].route)
+        navigate(page, page.views[-1].route)
 
     page.on_route_change = route_change
     page.on_resize = handle_resize
