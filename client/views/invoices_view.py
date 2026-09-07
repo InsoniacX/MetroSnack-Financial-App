@@ -1,7 +1,10 @@
 import flet as ft
 from datetime import date
 from config import MONTH
-from components.appbar import build_appbar, nav_rail
+from components.appbar import build_appbar, is_mobile_layout, nav_rail
+from components.file_picker import get_file_picker
+from components.navigation import navigate
+from components.pagination import ClientPagination
 from utils.formatting import rp
 from utils.validation import parse_year, require_text, parse_date, parse_positive_decimal
 from utils.pdf_export import generate_cabang_pdf
@@ -48,7 +51,7 @@ def build_cabang_hub(page: ft.Page)-> ft.Control:
                         ft.Column([ft.Text("Laba bersih", size=11, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600), ft.Text(rp(laba_bersih), size=16, weight=ft.FontWeight.W_500)]),
                     ], spacing=24),
                     ft.Container(height=14),
-                    ft.ElevatedButton("Lihat invoice cabang ini", icon=ft.Icons.ARROW_FORWARD, on_click=lambda e, cid=cid: page.go(f"/invoices/cabang/{cid}"), bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE),
+                    ft.ElevatedButton("Lihat invoice cabang ini", icon=ft.Icons.ARROW_FORWARD, on_click=lambda e, cid=cid: navigate(page, f"/invoices/cabang/{cid}"), bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE),
                 ], spacing=4),
                 bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE,
                 border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_300),
@@ -57,11 +60,21 @@ def build_cabang_hub(page: ft.Page)-> ft.Control:
             )
         )
 
+    all_cabang_cards = list(cabang_cards.controls)
+
+    def render_cabang_page():
+        cabang_cards.controls = cabang_pagination.paginate(all_cabang_cards)
+        page.update()
+
+    cabang_pagination = ClientPagination(render_cabang_page)
+    cabang_cards.controls = cabang_pagination.paginate(all_cabang_cards)
+
     body = ft.Column([
         ft.Text("Pilih cabang", size=20, weight=ft.FontWeight.W_500),
         ft.Text("Klik salah satu cabang untuk melihat daftar invoicenya.", size=13, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600),
         ft.Container(height=16),
         cabang_cards if cabang_summary else ft.Text("Belum ada cabang aktif. Tambahkan cabang lewat menu Cabang.", color=ft.Colors.GREY_600),
+        cabang_pagination.control,
     ], scroll=ft.ScrollMode.AUTO, expand=True)
     return body
     # return ft.View(
@@ -82,21 +95,60 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
     """Daftar folder MILIK 1 CABANG SPESIFIK. Dipakai baik untuk user cabang (route /invoices)
     maupun Admin Pusat yang sudah memilih 1 cabang (route /invoices/cabang/{id})."""
     is_dark = page.theme_mode == ft.ThemeMode.DARK
+    mobile = is_mobile_layout(page)
     actor = app_state.user
     is_pusat = actor.get("cabang_id") is None
     is_admin = actor.get("role") == "admin"
 
+    page_width = getattr(page, "width", None) or 1100
+    dialog_content_width = min(520, max(260, page_width - 72))
+
     if not is_pusat and cabang_id != actor.get("cabang_id"):
-        return ft.View(
-            route=route,
-            controls=[
-                build_appbar(page, "Akses Ditolak"),
-                ft.Container(content=ft.Text("Anda tidak punya akses ke cabang lain.", size=16), padding=24),
+        return ft.Column(
+            [
+                ft.Text(
+                    "Akses ditolak",
+                    size=20,
+                    weight=ft.FontWeight.W_500,
+                    color=ft.Colors.RED_400,
+                ),
+                ft.Text(
+                    "Anda tidak punya akses ke cabang lain.",
+                    size=14,
+                ),
+                ft.TextButton(
+                    "Kembali ke daftar invoice",
+                    icon=ft.Icons.ARROW_BACK,
+                    on_click=lambda e: navigate(page, "/invoices"),
+                ),
             ],
+            spacing=8,
         )
 
     def refresh():
-        page.views[-1] = build_folder_list(page, cabang_id, route, show_back)
+        if page.views and page.views[-1].controls:
+            root_control = page.views[-1].controls[0]
+            replacement = build_folder_list(
+                page,
+                cabang_id,
+                route,
+                show_back,
+            )
+
+            if isinstance(root_control, ft.Container):
+                root_control.content = replacement
+                page.update()
+                return
+
+            if (
+                isinstance(root_control, ft.Row)
+                and len(root_control.controls) >= 3
+                and isinstance(root_control.controls[2], ft.Container)
+            ):
+                root_control.controls[2].content = replacement
+                page.update()
+                return
+
         page.update()
 
     nama_cabang_label = None
@@ -178,7 +230,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
                         ft.Column([ft.Text("Laba bersih", size=11, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600), ft.Text(rp(laba_bersih), size=16, weight=ft.FontWeight.W_500)]),
                     ], spacing=24),
                     ft.Container(height=8),
-                    ft.ElevatedButton("Buka folder", icon=ft.Icons.FOLDER_OPEN, on_click=lambda e, fid=fid: page.go(f"/invoices/{fid}")),
+                    ft.ElevatedButton("Buka folder", icon=ft.Icons.FOLDER_OPEN, on_click=lambda e, fid=fid: navigate(page, f"/invoices/{fid}")),
                 ], spacing=4),
                 bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE,
                 border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_300),
@@ -187,16 +239,54 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
             )
         )
 
-    bulan_dd = ft.Dropdown(label="Bulan", width=180,
-                            options=[ft.dropdown.Option(str(i), MONTH[i]) for i in range(1, 13)])
-    tahun_field = ft.TextField(label="Tahun", width=120, value=str(date.today().year))
+    all_folder_cards = list(folder_cards.controls)
+
+    def render_folder_page():
+        folder_cards.controls = folder_pagination.paginate(all_folder_cards)
+        page.update()
+
+    folder_pagination = ClientPagination(render_folder_page)
+    folder_cards.controls = folder_pagination.paginate(all_folder_cards)
+
+    bulan_dd = ft.Dropdown(
+        label="Bulan",
+        options=[
+            ft.dropdown.Option(str(i), MONTH[i])
+            for i in range(1, 13)
+        ],
+        col={"xs": 12, "sm": 6},
+    )
+    tahun_field = ft.TextField(
+        label="Tahun",
+        value=str(date.today().year),
+        keyboard_type=ft.KeyboardType.NUMBER,
+        col={"xs": 12, "sm": 6},
+    )
     # BARU: sesuai kebijakan 1 folder = 1 invoice, field invoice langsung
     # ditanya di sini juga -- tidak perlu lagi buka folder lalu buat
     # invoice terpisah.
-    inv_no_field = ft.TextField(label="No. Laporan", width=150)
-    inv_tgl_dibuat_field = ft.TextField(label="Date (YYYY-MM-DD)", width=180, value=date.today().isoformat())
-    inv_tgl_laporan_field = ft.TextField(label="TGL Laporan (YYYY-MM-DD)", width=200, value=date.today().isoformat())
-    inv_bon_field = ft.TextField(label="Invoice / Bon / Modal (Rp)", width=200, value="0")
+    inv_no_field = ft.TextField(
+        label="No. Laporan",
+        max_length=50,
+        col={"xs": 12, "sm": 6},
+    )
+    inv_tgl_dibuat_field = ft.TextField(
+        label="Date (YYYY-MM-DD)",
+        value=date.today().isoformat(),
+        col={"xs": 12, "sm": 6},
+    )
+    inv_tgl_laporan_field = ft.TextField(
+        label="TGL Laporan (YYYY-MM-DD)",
+        value=date.today().isoformat(),
+        col={"xs": 12, "sm": 6},
+    )
+    inv_bon_field = ft.TextField(
+        label="Invoice / Bon / Modal (Rp)",
+        value="0",
+        hint_text="Contoh: 150000 atau 150.000",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        col={"xs": 12, "sm": 6},
+    )
 
     def submit_folder(e):
         if not bulan_dd.value:
@@ -226,29 +316,52 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
             log_activity(actor["id"], actor["username"], "CREATE", "invoice", iid, f"Membuat invoice {no_laporan} di {nama_folder}", cabang_id)
             page.pop_dialog()
             page.update()
-            page.go(f"/invoice/{iid}")
+            navigate(page, f"/invoice/{iid}")
         except Exception as ex:
             # Folder sudah terlanjur dibuat, tapi invoice gagal -- folder
             # ini sementara jadi 0-invoice, tetap bisa diakses lewat
             # halaman fallback (folder_detail_view) untuk coba buat lagi.
+            page.pop_dialog()
             page.show_dialog(ft.SnackBar(
                 ft.Text(f"Folder berhasil dibuat, tapi gagal membuat invoice: {ex}. Buka folder ini lagi untuk coba buat invoice."),
                 bgcolor=ft.Colors.RED_400,
             ))
-            page.pop_dialog()
-            page.update()
             refresh()
 
     dlg = ft.AlertDialog(
         title=ft.Text("Buat folder bulan baru"),
-        content=ft.Column([
-            ft.Row([bulan_dd, tahun_field]),
-            ft.Row([inv_no_field, inv_tgl_dibuat_field]),
-            ft.Row([inv_tgl_laporan_field, inv_bon_field]),
-        ], tight=True, spacing=10),
+        content=ft.Container(
+            content=ft.ResponsiveRow(
+                [
+                    bulan_dd,
+                    tahun_field,
+                    inv_no_field,
+                    inv_tgl_dibuat_field,
+                    inv_tgl_laporan_field,
+                    inv_bon_field,
+                ],
+                spacing=10,
+                run_spacing=10,
+            ),
+            width=dialog_content_width,
+        ),
+        content_padding=ft.Padding.only(
+            left=16,
+            right=16,
+            top=8,
+            bottom=8,
+        ),
+        inset_padding=12 if mobile else 40,
+        scrollable=True,
+        actions_alignment=ft.MainAxisAlignment.END,
         actions=[
             ft.TextButton("Batal", on_click=lambda e: page.pop_dialog()),
-            ft.ElevatedButton("Simpan & Mulai Input Transaksi", on_click=submit_folder),
+            ft.ElevatedButton(
+                "Simpan & Lanjut"
+                if mobile
+                else "Simpan & Mulai Input Transaksi",
+                on_click=submit_folder,
+            ),
         ],
     )
 
@@ -256,7 +369,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
         page.show_dialog(dlg)
 
     # ---------- Export PDF Cabang (BARU): rekap semua folder/bulan sekaligus ----------
-    export_picker = ft.FilePicker()
+    export_picker = get_file_picker(page, "invoice-cabang")
 
     async def export_cabang_pdf(e):
         if not folders:
@@ -277,10 +390,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
                 invoices_with_transaksi = []
                 for inv in invoices:
                     iid = inv[0]
-                    try:
-                        transaksi = get_transaksi(iid)
-                    except Exception:
-                        transaksi = []
+                    transaksi = get_transaksi(iid)
                     invoices_with_transaksi.append({"header": inv, "transaksi": transaksi})
                 folders_data.append({"nama_folder": nama_folder, "invoices_with_transaksi": invoices_with_transaksi})
                 
@@ -312,26 +422,65 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
 
     title_text = f"Invoice - {nama_cabang_label}" if show_back and nama_cabang_label else "Daftar invoice"
 
-    header_row_controls = []
+    header_title_controls = []
     if show_back:
-        header_row_controls.append(ft.IconButton(ft.Icons.ARROW_BACK, on_click=lambda e: page.go("/invoices")))
-    header_row_controls.append(
+        header_title_controls.append(
+            ft.IconButton(
+                ft.Icons.ARROW_BACK,
+                on_click=lambda e: navigate(page, "/invoices"),
+            )
+        )
+    header_title_controls.append(
         ft.Column([
             ft.Text(title_text, size=20, weight=ft.FontWeight.W_500),
             ft.Text("Kelola dokumen keuangan bulanan Anda.", size=13, color=ft.Colors.GREY_600),
         ], expand=True)
     )
-    header_row_controls.append(
-        ft.OutlinedButton("Export PDF Cabang", icon=ft.Icons.PICTURE_AS_PDF, on_click=export_cabang_pdf)
+
+    header_title = ft.Container(
+        content=ft.Row(
+            header_title_controls,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+        ),
+        col={"xs": 12, "md": 6},
     )
-    header_row_controls.append(
-        ft.ElevatedButton("Buat folder bulan baru", icon=ft.Icons.ADD, on_click=open_dialog, bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE)
+    header_actions = ft.Container(
+        content=ft.Row(
+            [
+                ft.OutlinedButton(
+                    "Export PDF" if mobile else "Export PDF Cabang",
+                    icon=ft.Icons.PICTURE_AS_PDF,
+                    on_click=export_cabang_pdf,
+                ),
+                ft.ElevatedButton(
+                    "Buat Folder" if mobile else "Buat folder bulan baru",
+                    icon=ft.Icons.ADD,
+                    on_click=open_dialog,
+                    bgcolor=ft.Colors.BLUE_700,
+                    color=ft.Colors.WHITE,
+                ),
+            ],
+            wrap=True,
+            spacing=8,
+            run_spacing=8,
+            alignment=(
+                ft.MainAxisAlignment.START
+                if mobile
+                else ft.MainAxisAlignment.END
+            ),
+        ),
+        col={"xs": 12, "md": 6},
     )
 
     body = ft.Column([
-        ft.Row(header_row_controls),
+        ft.ResponsiveRow(
+            [header_title, header_actions],
+            spacing=8,
+            run_spacing=8,
+        ),
         ft.Container(height=16),
         folder_cards if folders else ft.Text("Belum ada folder bulan. Buat folder baru untuk mulai.", color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600),
+        folder_pagination.control,
     ], scroll=ft.ScrollMode.AUTO, expand=True)
 
     return body

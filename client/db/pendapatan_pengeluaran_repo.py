@@ -1,8 +1,16 @@
+from calendar import monthrange
+from datetime import date
 from decimal import Decimal
-from datetime import date, datetime
-from .http_client import api_get, api_post, api_put, api_delete, ApiError
+
 from ._convert import to_date, to_decimal
-from .cabang_repo import get_active_cabang, get_cabang_name
+from .cabang_repo import get_active_cabang
+from .http_client import (
+    ApiError,
+    api_delete,
+    api_get,
+    api_post,
+    api_put,
+)
 
 DEFAULT_KATEGORI_PENDAPATAN = [
     "Penjualan Langsung",
@@ -24,6 +32,12 @@ DEFAULT_KATEGORI_PENGELUARAN = [
     "Lain-lain",
 ]
 
+API_ROW_LIMIT = 500
+
+
+class IncompleteDataError(RuntimeError):
+    """Data tidak boleh dipakai ketika API kemungkinan memotong hasil."""
+
 
 def _iso(value):
     if value is None:
@@ -31,6 +45,80 @@ def _iso(value):
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return str(value)
+
+
+def _resolve_date_range(
+    bulan=None,
+    tahun=None,
+    start_date=None,
+    end_date=None,
+):
+    resolved_start = (
+        to_date(start_date)
+        if start_date is not None
+        else None
+    )
+    resolved_end = (
+        to_date(end_date)
+        if end_date is not None
+        else None
+    )
+
+    if (bulan is None) != (tahun is None):
+        raise ValueError(
+            "Bulan dan tahun harus diberikan bersama-sama."
+        )
+
+    if bulan is not None:
+        try:
+            selected_month = int(bulan)
+            selected_year = int(tahun)
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "Bulan atau tahun tidak valid."
+            ) from error
+
+        if not 1 <= selected_month <= 12:
+            raise ValueError("Bulan harus berada antara 1 sampai 12.")
+
+        if not 2000 <= selected_year <= 2100:
+            raise ValueError("Tahun harus berada antara 2000 sampai 2100.")
+
+        month_start = date(
+            selected_year,
+            selected_month,
+            1,
+        )
+        month_end = date(
+            selected_year,
+            selected_month,
+            monthrange(
+                selected_year,
+                selected_month,
+            )[1],
+        )
+
+        resolved_start = (
+            max(resolved_start, month_start)
+            if resolved_start
+            else month_start
+        )
+        resolved_end = (
+            min(resolved_end, month_end)
+            if resolved_end
+            else month_end
+        )
+
+    if (
+        resolved_start is not None
+        and resolved_end is not None
+        and resolved_start > resolved_end
+    ):
+        raise ValueError(
+            "Tanggal awal tidak boleh melewati tanggal akhir."
+        )
+
+    return resolved_start, resolved_end
 
 
 def _parse_item_name(nama_str):
@@ -78,95 +166,217 @@ def get_transaksi_kas(
     sort_order="desc",
 ):
     """
-    Mengambil daftar transaksi pendapatan/pengeluaran dari backend API.
-    Mendukung filter cabang_id, rentang tanggal, bulan/tahun, jenis, kategori, dan search keyword.
-    """
-    cabang_name_map = {}
-    try:
-        active_cabangs = get_active_cabang()
-        cabang_name_map = {c[0]: c[1] for c in active_cabangs}
-    except Exception:
-        pass
+    Mengambil transaksi pendapatan dan pengeluaran dari backend.
 
-    raw_rows = []
-    if cabang_id is not None:
-        params = {"cabang_id": cabang_id, "limit": 500}
-        if start_date:
+    Data yang mencapai batas API tidak akan dianggap lengkap.
+    Pengguna harus mempersempit rentang tanggalnya.
+    """
+    start_date, end_date = _resolve_date_range(
+        bulan=bulan,
+        tahun=tahun,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    normalized_jenis = None
+    if jenis and str(jenis).lower() in (
+        "pendapatan",
+        "pengeluaran",
+    ):
+        normalized_jenis = str(jenis).lower()
+
+    cabang_name_map = {}
+
+    if cabang_id is None:
+        active_cabangs = get_active_cabang()
+
+        if not active_cabangs:
+            return []
+
+        cabang_name_map = {
+            int(item[0]): item[1]
+            for item in active_cabangs
+        }
+        target_cabangs = list(cabang_name_map.items())
+    else:
+        try:
+            selected_cabang_id = int(cabang_id)
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "ID cabang tidak valid."
+            ) from error
+
+        if selected_cabang_id <= 0:
+            raise ValueError(
+                "ID cabang harus lebih besar dari nol."
+            )
+
+        target_cabangs = [
+            (
+                selected_cabang_id,
+                f"Cabang {selected_cabang_id}",
+            )
+        ]
+
+    def fetch_branch_rows(target_id, target_name):
+        params = {
+            "cabang_id": target_id,
+            "limit": API_ROW_LIMIT,
+        }
+
+        if start_date is not None:
             params["tanggal_awal"] = _iso(start_date)
-        if end_date:
+
+        if end_date is not None:
             params["tanggal_akhir"] = _iso(end_date)
-        if jenis and str(jenis).lower() in ("pendapatan", "pengeluaran"):
-            params["jenis"] = str(jenis).lower()
+
+        if normalized_jenis is not None:
+            params["jenis"] = normalized_jenis
 
         try:
-            resp = api_get("/pendapatan-pengeluaran", params=params)
-            if resp:
-                raw_rows.extend(resp)
-        except ApiError as e:
-            # Jika cabang ini belum diaktifkan fiturnya (403), teruskan error
-            raise e
-    else:
-        # Jika cabang_id None (misal akun Pusat melihat semua cabang), query per cabang
-        if not cabang_name_map:
-            return []
-        for cid in cabang_name_map.keys():
-            params = {"cabang_id": cid, "limit": 500}
-            if start_date:
-                params["tanggal_awal"] = _iso(start_date)
-            if end_date:
-                params["tanggal_akhir"] = _iso(end_date)
-            if jenis and str(jenis).lower() in ("pendapatan", "pengeluaran"):
-                params["jenis"] = str(jenis).lower()
-            try:
-                resp = api_get("/pendapatan-pengeluaran", params=params)
-                if resp:
-                    raw_rows.extend(resp)
-            except ApiError:
-                # Abaikan cabang yang belum punya akses / 403 saat multi-cabang query
-                continue
+            response = api_get(
+                "/pendapatan-pengeluaran",
+                params=params,
+            )
+        except ApiError as error:
+            raise ApiError(
+                error.status_code,
+                (
+                    f"Data {target_name} gagal dimuat: "
+                    f"{error}"
+                ),
+            ) from error
+        except Exception as error:
+            raise RuntimeError(
+                f"Data {target_name} gagal dimuat: {error}"
+            ) from error
+
+        rows = response or []
+
+        if not isinstance(rows, list):
+            raise RuntimeError(
+                f"Respons data {target_name} tidak valid."
+            )
+
+        if len(rows) >= API_ROW_LIMIT:
+            raise IncompleteDataError(
+                f"Data {target_name} mencapai batas "
+                f"{API_ROW_LIMIT} transaksi. "
+                "Persempit rentang tanggal agar laporan "
+                "dapat ditampilkan secara lengkap."
+            )
+
+        return rows
+
+    raw_rows = []
+
+    for target_id, target_name in target_cabangs:
+        branch_rows = fetch_branch_rows(
+            target_id,
+            target_name,
+        )
+        raw_rows.extend(branch_rows)
 
     items = []
-    for r in raw_rows:
-        # Structure: [id, cabang_id, tanggal, jenis, nama_pengeluaran, nominal, user_id, created_at, updated_at]
-        eid, cid, tgl, jns, nama_pengeluaran, nom, *rest = r
-        tgl_dt = to_date(tgl)
 
-        # Filter Bulan & Tahun jika diberikan
-        if bulan is not None and tgl_dt and tgl_dt.month != bulan:
+    for row in raw_rows:
+        (
+            entry_id,
+            item_cabang_id,
+            tanggal,
+            item_jenis,
+            nama_pengeluaran,
+            nominal,
+            *rest,
+        ) = row
+
+        tanggal_data = to_date(tanggal)
+
+        # Pemeriksaan tambahan jika fungsi dipanggil memakai bulan/tahun.
+        if (
+            bulan is not None
+            and tanggal_data
+            and tanggal_data.month != int(bulan)
+        ):
             continue
-        if tahun is not None and tgl_dt and tgl_dt.year != tahun:
+
+        if (
+            tahun is not None
+            and tanggal_data
+            and tanggal_data.year != int(tahun)
+        ):
             continue
 
-        kat_extracted, ket_extracted = _parse_item_name(nama_pengeluaran)
+        kategori_data, keterangan_data = _parse_item_name(
+            nama_pengeluaran
+        )
 
-        # Filter Kategori jika diberikan
-        if kategori and kategori != "Semua" and kat_extracted.lower() != kategori.lower():
+        if (
+            kategori
+            and kategori != "Semua"
+            and kategori_data.lower() != kategori.lower()
+        ):
             continue
 
-        cbg_nama = cabang_name_map.get(cid) or f"Cabang {cid}"
+        nama_cabang = (
+            cabang_name_map.get(item_cabang_id)
+            or f"Cabang {item_cabang_id}"
+        )
 
-        # Filter Search keyword
         if search:
-            s = search.lower().strip()
-            nama_full = str(nama_pengeluaran or "").lower()
-            cbg_str = cbg_nama.lower()
-            if s not in nama_full and s not in cbg_str and s not in kat_extracted.lower() and s not in ket_extracted.lower():
+            keyword = search.lower().strip()
+            nama_full = str(
+                nama_pengeluaran or ""
+            ).lower()
+
+            searchable_values = (
+                nama_full,
+                nama_cabang.lower(),
+                kategori_data.lower(),
+                keterangan_data.lower(),
+            )
+
+            if not any(
+                keyword in value
+                for value in searchable_values
+            ):
                 continue
 
-        items.append({
-            "id": eid,
-            "cabang_id": cid,
-            "nama_cabang": cbg_nama,
-            "tanggal": tgl_dt or date.today(),
-            "jenis": "Pendapatan" if str(jns).lower() == "pendapatan" else "Pengeluaran",
-            "kategori": kat_extracted,
-            "nominal": to_decimal(nom),
-            "keterangan": ket_extracted or nama_pengeluaran or "-",
-            "nota": "",
-        })
+        items.append(
+            {
+                "id": entry_id,
+                "cabang_id": item_cabang_id,
+                "nama_cabang": nama_cabang,
+                "tanggal": tanggal_data or date.today(),
+                "jenis": (
+                    "Pendapatan"
+                    if str(item_jenis).lower()
+                    == "pendapatan"
+                    else "Pengeluaran"
+                ),
+                "kategori": kategori_data,
+                "nominal": to_decimal(nominal),
+                "keterangan": (
+                    keterangan_data
+                    or nama_pengeluaran
+                    or "-"
+                ),
+                "nota": "",
+            }
+        )
 
-    is_desc = (sort_order or "desc").lower() == "desc"
-    items.sort(key=lambda x: (x["tanggal"], x["id"]), reverse=is_desc)
+    descending = (
+        (sort_order or "desc").lower() == "desc"
+    )
+
+    items.sort(
+        key=lambda item: (
+            item["tanggal"],
+            item["id"],
+        ),
+        reverse=descending,
+    )
+
     return items
 
 

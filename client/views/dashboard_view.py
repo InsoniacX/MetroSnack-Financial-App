@@ -1,8 +1,8 @@
 import flet as ft
 import flet_charts as fc
 from config import MONTH
-from components.appbar import build_appbar, nav_rail
 from components.metric_card import metric_card
+from components.navigation import navigate
 from utils.formatting import rp
 from utils.hutang_style import hutang_style
 from db.folder_repo import get_dashboard_summary, get_monthly_trend, get_cabang_breakdown
@@ -15,8 +15,16 @@ PIE_COLORS = [
 ]
 
 
-def build_chart(page, trend_data):
+def build_chart(page, trend_data, load_error=None):
     is_dark = page.theme_mode == ft.ThemeMode.DARK
+
+    if load_error is not None:
+        return _error_panel(
+            page,
+            "Tren bulanan gagal dimuat",
+            "Grafik tidak ditampilkan karena data dari backend gagal dimuat.",
+        )
+
     if not trend_data:
         return ft.Container(
             content=ft.Text("Belum ada data folder bulan untuk ditampilkan di grafik.", color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600),
@@ -59,7 +67,7 @@ def build_chart(page, trend_data):
     legend = ft.Row([
         ft.Row([ft.Container(width=10, height=10, bgcolor=ft.Colors.BLUE_400, border_radius=3), ft.Text("Omset", size=12)], spacing=4),
         ft.Row([ft.Container(width=10, height=10, bgcolor=ft.Colors.GREEN_400, border_radius=3), ft.Text("Laba Bersih", size=12)], spacing=4),
-    ], spacing=16)
+    ], spacing=16, run_spacing=8, wrap=True)
 
     return ft.Column([legend, ft.Container(height=8), chart])
 
@@ -101,8 +109,8 @@ def build_cabang_pie(page, cabang_breakdown, field, judul):
         legend_rows.append(
             ft.Row([
                 ft.Container(width=10, height=10, bgcolor=color, border_radius=3),
-                ft.Text(f"{nama_cabang} · {rp(v)}", size=12),
-            ], spacing=6)
+                ft.Text(f"{nama_cabang} · {rp(v)}", size=12, expand=True),
+            ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START)
         )
 
     pie = fc.PieChart(sections=sections, sections_space=2, center_space_radius=28, height=180)
@@ -116,32 +124,101 @@ def build_cabang_pie(page, cabang_breakdown, field, judul):
     ])
 
 
+def _metric_slot(card):
+    return ft.Container(
+        content=card,
+        col={"xs": 12, "sm": 6, "md": 3},
+        height=104,
+    )
+
+
+def _error_panel(page, title, message):
+    is_dark = page.theme_mode == ft.ThemeMode.DARK
+
+    return ft.Container(
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Icon(
+                            ft.Icons.CLOUD_OFF_OUTLINED,
+                            color=ft.Colors.RED_300 if is_dark else ft.Colors.RED_700,
+                            size=24,
+                        ),
+                        ft.Text(
+                            title,
+                            size=15,
+                            weight=ft.FontWeight.W_600,
+                            color=ft.Colors.RED_200 if is_dark else ft.Colors.RED_900,
+                        ),
+                    ],
+                    spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Text(
+                    message,
+                    size=13,
+                    color=ft.Colors.GREY_300 if is_dark else ft.Colors.GREY_700,
+                ),
+                ft.OutlinedButton(
+                    "Coba lagi",
+                    icon=ft.Icons.REFRESH,
+                    on_click=lambda e: navigate(
+                        page,
+                        page.route or "/dashboard",
+                    ),
+                ),
+            ],
+            spacing=10,
+            horizontal_alignment=ft.CrossAxisAlignment.START,
+        ),
+        bgcolor=ft.Colors.RED_900 if is_dark else ft.Colors.RED_50,
+        border=ft.Border.all(
+            0.8,
+            ft.Colors.RED_800 if is_dark else ft.Colors.RED_200,
+        ),
+        border_radius=10,
+        padding=16,
+    )
+
+
 def build_view(page: ft.Page):
     is_dark = page.theme_mode == ft.ThemeMode.DARK
     cabang_id = app_state.user.get("cabang_id")
     is_pusat = cabang_id is None
     scope_label = "Semua Cabang" if is_pusat else app_state.user.get("nama_cabang", "-")
 
+    summary = None
+    summary_error = None
     try:
         summary = get_dashboard_summary(cabang_id)
-    except Exception:
-        summary = {"omzet": 0, "barang": 0, "laba_bersih": 0, "sisa_hutang": 0}
+    except Exception as error:
+        summary_error = error
 
+    trend_data = []
+    trend_error = None
     try:
         trend_data = get_monthly_trend(cabang_id, limit_months=6)
-    except Exception:
-        trend_data = []
+    except Exception as error:
+        trend_error = error
 
     pie_section = None
     if is_pusat:
+        cabang_breakdown = []
+        breakdown_error = None
         try:
             cabang_breakdown = get_cabang_breakdown()
-        except Exception:
-            cabang_breakdown = []
-        pie_section = ft.Column([
-            ft.Text("Pemasukan & Pengeluaran per Cabang", size=16, weight=ft.FontWeight.W_500),
-            ft.Container(height=8),
-            ft.ResponsiveRow([
+        except Exception as error:
+            breakdown_error = error
+
+        if breakdown_error is not None:
+            breakdown_content = _error_panel(
+                page,
+                "Rincian per cabang gagal dimuat",
+                "Perbandingan cabang tidak ditampilkan karena data dari backend gagal dimuat.",
+            )
+        else:
+            breakdown_content = ft.ResponsiveRow([
                 ft.Container(
                     col={"xs": 12, "md": 6},
                     content=ft.Container(
@@ -158,14 +235,32 @@ def build_view(page: ft.Page):
                         border_radius=12, padding=16,
                     ),
                 ),
-            ], spacing=12, run_spacing=12),
+            ], spacing=12, run_spacing=12)
+
+        pie_section = ft.Column([
+            ft.Text("Pemasukan & Pengeluaran per Cabang", size=16, weight=ft.FontWeight.W_500),
+            ft.Container(height=8),
+            breakdown_content,
             ft.Container(height=24),
         ])
 
-    # Card Total Hutang -- sekarang pakai data ASLI dari formula Sisa Hutang
-    # yang sudah CONFIRMED di backend (dulu placeholder rp(0)).
-    hutang_nilai, hutang_bg, hutang_text, dark_hutang_bg, dark_hutang_text = hutang_style(summary.get("sisa_hutang", 0))
-    hutang_label = "Total Hutang (Semua Toko)" if is_pusat else "Total Hutang Toko Ini"
+    if summary_error is not None:
+        metric_content = _error_panel(
+            page,
+            "Ringkasan dashboard gagal dimuat",
+            "Angka keuangan tidak ditampilkan agar kegagalan koneksi tidak terbaca sebagai nilai nol.",
+        )
+    else:
+        # Card Total Hutang memakai data dari formula Sisa Hutang backend.
+        hutang_nilai, hutang_bg, hutang_text, dark_hutang_bg, dark_hutang_text = hutang_style(summary.get("sisa_hutang", 0))
+        hutang_label = "Total Hutang (Semua Toko)" if is_pusat else "Total Hutang Toko Ini"
+
+        metric_content = ft.ResponsiveRow([
+            _metric_slot(metric_card(page, "Total omzet", rp(summary["omzet"]))),
+            _metric_slot(metric_card(page, "Total masuk barang", rp(summary["barang"]))),
+            _metric_slot(metric_card(page, hutang_label, rp(hutang_nilai), light_color=hutang_bg, light_text_color=hutang_text, dark_color=dark_hutang_bg, dark_text_color=dark_hutang_text)),
+            _metric_slot(metric_card(page, "Laba bersih", rp(summary["laba_bersih"]), light_color=ft.Colors.GREEN_50, light_text_color=ft.Colors.GREEN_900, dark_color=ft.Colors.GREEN_900, dark_text_color=ft.Colors.GREEN_100)),
+        ], spacing=12, run_spacing=12, breakpoints={"sm": 360, "md": 900})
 
     body_controls = [
         ft.Text("Selamat datang kembali", size=20, weight=ft.FontWeight.W_500),
@@ -175,14 +270,9 @@ def build_view(page: ft.Page):
                 content=ft.Text(scope_label, size=12, color=ft.Colors.BLUE_100 if is_dark else ft.Colors.BLUE_900),
                 bgcolor=ft.Colors.BLUE_900 if is_dark else ft.Colors.BLUE_50, padding=ft.Padding.symmetric(vertical=2, horizontal=8), border_radius=6,
             ),
-        ], spacing=6),
+        ], spacing=6, run_spacing=6, wrap=True),
         ft.Container(height=16),
-        ft.Row([
-            metric_card(page, "Total omzet", rp(summary["omzet"])),
-            metric_card(page, "Total masuk barang", rp(summary["barang"])),
-            metric_card(page, hutang_label, rp(hutang_nilai), light_color=hutang_bg, light_text_color=hutang_text, dark_color=dark_hutang_bg, dark_text_color=dark_hutang_text),
-            metric_card(page, "Laba bersih", rp(summary["laba_bersih"]), light_color=ft.Colors.GREEN_50, light_text_color=ft.Colors.GREEN_900, dark_color=ft.Colors.GREEN_900, dark_text_color=ft.Colors.GREEN_100),
-        ], spacing=12),
+        metric_content,
         ft.Container(height=24),
     ]
 
@@ -193,12 +283,12 @@ def build_view(page: ft.Page):
         ft.Text("Tren Omset & Laba Bersih (6 Bulan Terakhir)", size=16, weight=ft.FontWeight.W_500),
         ft.Container(height=8),
         ft.Container(
-            content=build_chart(page, trend_data),
+            content=build_chart(page, trend_data, trend_error),
             bgcolor=ft.Colors.GREY_900 if is_dark else ft.Colors.WHITE, border=ft.Border.all(0.5, ft.Colors.GREY_700 if is_dark else ft.Colors.GREY_300),
             border_radius=12, padding=16,
         ),
         ft.Container(height=24),
-        ft.ElevatedButton("Lihat daftar invoice", icon=ft.Icons.ARROW_FORWARD, on_click=lambda e: page.go("/invoices")),
+        ft.ElevatedButton("Lihat daftar invoice", icon=ft.Icons.ARROW_FORWARD, on_click=lambda e: navigate(page, "/invoices")),
     ])
 
     body = ft.Column(body_controls, spacing=6, expand=True, scroll=ft.ScrollMode.AUTO)
