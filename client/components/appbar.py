@@ -6,7 +6,7 @@ from state import app_state
 
 MOBILE_BREAKPOINT = 960
 MOBILE_SHORTEST_SIDE_BREAKPOINT = 600
-_ZEBOR_CABANG_NAME = "Zebor"
+_ZEBOR_CABANG_NAME = "Toko Zebor"
 
 
 def is_mobile_layout(page):
