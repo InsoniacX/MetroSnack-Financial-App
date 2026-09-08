@@ -7,7 +7,7 @@ from auth.dependencies import (
 from repositories import cabang_repo
 
 
-_ZEBOR_CABANG_NAME = "Zebor"
+_ZEBOR_CABANG_NAME = "Toko Zebor"
 
 
 def assert_zebor_feature_access(

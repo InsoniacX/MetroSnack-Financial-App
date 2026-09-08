@@ -97,7 +97,7 @@ def seeded_ids(client):
     return {
         "zebor": get_id(
             "SELECT id FROM cabang WHERE nama_cabang = %s",
-            ("Zebor",),
+            ("Toko Zebor",),
         ),
         "cabang_b": get_id(
             "SELECT id FROM cabang WHERE nama_cabang = %s",
