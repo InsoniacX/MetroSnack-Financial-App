@@ -154,6 +154,40 @@ def _format_item_name(kategori, keterangan):
     return ket or kat or "Transaksi Kas"
 
 
+def get_periode_kas(cabang_id, tahun=None):
+    params = {
+        "cabang_id": int(cabang_id),
+    }
+
+    if tahun is not None:
+        params["tahun"] = int(tahun)
+
+    response = api_get(
+        "/pendapatan-pengeluaran/periode",
+        params=params,
+    )
+
+    return [
+        {
+            "bulan": int(item["bulan"]),
+            "tahun": int(item["tahun"]),
+            "jumlah_transaksi": int(
+                item["jumlah_transaksi"]
+            ),
+            "total_pendapatan": to_decimal(
+                item["total_pendapatan"]
+            ),
+            "total_pengeluaran": to_decimal(
+                item["total_pengeluaran"]
+            ),
+            "saldo_bersih": to_decimal(
+                item["saldo_bersih"]
+            ),
+        }
+        for item in (response or [])
+    ]
+
+
 def get_transaksi_kas(
     cabang_id=None,
     bulan=None,

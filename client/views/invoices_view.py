@@ -9,6 +9,7 @@ from utils.formatting import rp
 from utils.validation import parse_year, require_text, parse_date, parse_positive_decimal
 from utils.pdf_export import generate_cabang_pdf
 from db.folder_repo import get_folders, create_folder, delete_folder, get_cabang_summary
+from db.finance_repo import get_folder_balances
 from db.cabang_repo import get_cabang_name
 from db.invoice_repo import get_invoices, create_invoice
 from db.transaksi_repo import get_transaksi
@@ -381,7 +382,8 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
         try:
             # Urutkan folder dari yang lama ke baru supaya laporan runtut
             # (get_folders() mengembalikan urutan terbaru dulu).
-            folders_sorted = sorted(folders, key=lambda f: (f[3], f[2]))  # (tahun, bulan) ascending
+            folders_sorted = sorted(get_folders(cabang_id), key=lambda f: (f[3], f[2]))
+            balances = get_folder_balances(cabang_id)
 
             folders_data = []
             for f in folders_sorted:
@@ -392,7 +394,8 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
                     iid = inv[0]
                     transaksi = get_transaksi(iid)
                     invoices_with_transaksi.append({"header": inv, "transaksi": transaksi})
-                folders_data.append({"nama_folder": nama_folder, "invoices_with_transaksi": invoices_with_transaksi})
+                folders_data.append({"nama_folder": nama_folder, "invoices_with_transaksi": invoices_with_transaksi,
+                                     "keuangan_folder": balances[fid]})
                 
             if page.platform == ft.PagePlatform.ANDROID or page.platform == ft.PagePlatform.IOS:
                 pdf_bytes = generate_cabang_pdf(label_cabang, folders_data, None)

@@ -221,6 +221,14 @@ class PendapatanPengeluaranUpdate(BaseModel):
         decimal_places=2,
     )
 
+class PendapatanPengeluaranPeriode(BaseModel):
+    bulan: int = Field(..., ge=1, le=12)
+    tahun: int = Field(..., ge=2000, le=2100)
+    jumlah_transaksi: int = Field(..., ge=0)
+    total_pendapatan: Decimal
+    total_pengeluaran: Decimal
+    saldo_bersih: Decimal
+
 class SupirKenekCreate(BaseModel):
     cabang_id: int = Field(..., gt=0)
     nama: str = Field(..., max_length=100)

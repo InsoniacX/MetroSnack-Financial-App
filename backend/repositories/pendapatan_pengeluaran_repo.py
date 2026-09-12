@@ -1,3 +1,5 @@
+from datetime import date
+
 from database.connection import fetch_all, fetch_one, execute
 
 
@@ -64,6 +66,69 @@ def delete_entry(entry_id):
     execute("DELETE FROM pendapatan_pengeluaran_harian WHERE id = %s", (entry_id,))
 
 
+def get_periods(cabang_id, tahun=None):
+    """
+    Mengambil daftar bulan yang mempunyai transaksi Kas.
+
+    Folder bulan tidak disimpan sebagai tabel. Periode dibentuk dari
+    kolom tanggal pada pendapatan_pengeluaran_harian.
+    """
+    query = """
+        SELECT
+            date_trunc('month', tanggal)::date AS periode,
+            COUNT(*)::INTEGER AS jumlah_transaksi,
+            COALESCE(
+                SUM(nominal) FILTER (
+                    WHERE jenis = 'pendapatan'
+                ),
+                0
+            ) AS total_pendapatan,
+            COALESCE(
+                SUM(nominal) FILTER (
+                    WHERE jenis = 'pengeluaran'
+                ),
+                0
+            ) AS total_pengeluaran
+        FROM pendapatan_pengeluaran_harian
+        WHERE cabang_id = %s
+    """
+    params = [cabang_id]
+
+    if tahun is not None:
+        tanggal_awal = date(tahun, 1, 1)
+        tanggal_akhir = date(tahun + 1, 1, 1)
+
+        query += """
+            AND tanggal >= %s
+            AND tanggal < %s
+        """
+        params.extend([tanggal_awal, tanggal_akhir])
+
+    query += """
+        GROUP BY date_trunc('month', tanggal)
+        ORDER BY periode DESC
+    """
+
+    rows = fetch_all(query, tuple(params))
+
+    return [
+        {
+            "bulan": periode.month,
+            "tahun": periode.year,
+            "jumlah_transaksi": jumlah_transaksi,
+            "total_pendapatan": total_pendapatan,
+            "total_pengeluaran": total_pengeluaran,
+            "saldo_bersih": total_pendapatan - total_pengeluaran,
+        }
+        for (
+            periode,
+            jumlah_transaksi,
+            total_pendapatan,
+            total_pengeluaran,
+        ) in rows
+    ]
+
+
 def get_daily_summary(cabang_id, tanggal):
     """Total pendapatan/pengeluaran/bersih untuk 1 cabang di 1 tanggal."""
     row = fetch_one("""
@@ -90,8 +155,8 @@ def get_monthly_summary(cabang_id, bulan, tahun):
             COALESCE(SUM(nominal) FILTER (WHERE jenis = 'pengeluaran'), 0)
         FROM pendapatan_pengeluaran_harian
         WHERE cabang_id = %s
-          AND EXTRACT(MONTH FROM tanggal) = %s
-          AND EXTRACT(YEAR FROM tanggal) = %s
+            AND EXTRACT(MONTH FROM tanggal) = %s
+            AND EXTRACT(YEAR FROM tanggal) = %s
     """, (cabang_id, bulan, tahun))
 
     per_hari = fetch_all("""
@@ -100,8 +165,8 @@ def get_monthly_summary(cabang_id, bulan, tahun):
             COALESCE(SUM(nominal) FILTER (WHERE jenis = 'pengeluaran'), 0)
         FROM pendapatan_pengeluaran_harian
         WHERE cabang_id = %s
-          AND EXTRACT(MONTH FROM tanggal) = %s
-          AND EXTRACT(YEAR FROM tanggal) = %s
+            AND EXTRACT(MONTH FROM tanggal) = %s
+            AND EXTRACT(YEAR FROM tanggal) = %s
         GROUP BY tanggal
         ORDER BY tanggal
     """, (cabang_id, bulan, tahun))

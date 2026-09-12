@@ -22,7 +22,7 @@ from views import (
     invoice_detail_view,
     invoices_view,
     login_view,
-    pendapatan_pengeluaran_view,
+    kas_navigation_view,
     pengambilan_balaraja_view,
     pengambilan_pabrik_view,
     rekap_bulanan_view,
@@ -474,7 +474,7 @@ async def main(page: ft.Page):
             "/pendapatan-pengeluaran"
         ):
             body = (
-                pendapatan_pengeluaran_view.build_view(
+                kas_navigation_view.build_view(
                     page
                 )
             )

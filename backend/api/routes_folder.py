@@ -8,6 +8,7 @@ from auth.dependencies import (
 from models.schemas import FolderCreate
 from repositories import folder_repo, invoice_repo
 from repositories.activity_repo import log_activity
+from services import debt_service
 
 router = APIRouter(prefix="/folders", tags=["folders"])
 
@@ -33,6 +34,28 @@ def create_folder(body: FolderCreate, user: dict = Depends(get_current_user)):
         )
     log_activity(user["id"], user["username"], "CREATE", "folder_bulan", new_id, None, body.cabang_id)
     return {"id": new_id}
+
+
+@router.get("/saldo-hutang")
+def list_folder_balances(cabang_id: int | None = None, user: dict = Depends(get_current_user)):
+    if cabang_id is not None:
+        assert_cabang_access(user, cabang_id)
+    elif not is_pusat_admin(user):
+        cabang_id = user["cabang_id"]
+    periods, _ = debt_service.get_history(cabang_id)
+    return periods
+
+
+@router.get("/{folder_id}/saldo-hutang")
+def get_folder_balance(folder_id: int, user: dict = Depends(get_current_user)):
+    header = folder_repo.get_folder_header(folder_id)
+    if header is None:
+        raise HTTPException(status_code=404, detail="Folder tidak ditemukan")
+    assert_cabang_access(user, header[2])
+    result = debt_service.get_folder_balance(folder_id, header[2])
+    if result is None:
+        raise HTTPException(status_code=404, detail="Folder tidak ditemukan")
+    return result
 
 
 @router.get("/{folder_id}/invoice-ids")

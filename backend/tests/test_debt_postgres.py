@@ -1,0 +1,80 @@
+"""Query verification using TEMP tables only, in the explicitly named local test DB.
+
+No seed, migration, public-table writes, or commits. Always rolled back.
+Run with --noconftest to avoid the application's database fixtures.
+"""
+from pathlib import Path
+
+import psycopg2
+import pytest
+from dotenv import dotenv_values
+
+from repositories import finance_repo
+from services.finance_service import hitung_riwayat_hutang, ringkasan_seluruh_cabang
+
+
+@pytest.fixture
+def isolated_db(monkeypatch):
+    config = dotenv_values(Path(__file__).resolve().parents[1] / ".env.test")
+    if config.get("DB_NAME") != "metrosnack_financial_test" or config.get("DB_HOST", "localhost") not in ("localhost", "127.0.0.1", "::1"):
+        pytest.skip("Local metrosnack_financial_test configuration required")
+    try:
+        conn = psycopg2.connect(host=config.get("DB_HOST", "localhost"),
+                                port=config.get("DB_PORT", "5432"), dbname=config["DB_NAME"],
+                                user=config.get("DB_USER", "postgres"), password=config.get("DB_PASSWORD", ""),
+                                connect_timeout=3)
+    except psycopg2.OperationalError:
+        pytest.skip("Local test PostgreSQL is unavailable; no real tables accessed")
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SET LOCAL search_path TO pg_temp")
+            cur.execute("""
+                CREATE TEMP TABLE cabang (id int PRIMARY KEY, nama_cabang text, aktif bool);
+                CREATE TEMP TABLE folder_bulan (id int PRIMARY KEY, nama_folder text, tahun int, bulan int, cabang_id int);
+                CREATE TEMP TABLE invoice (id int PRIMARY KEY, folder_bulan_id int, invoice_bon numeric(15,2));
+                CREATE TEMP TABLE transaksi_harian (id int PRIMARY KEY, invoice_id int, masuk_uang numeric(15,2), masuk_barang numeric(15,2));
+                INSERT INTO cabang VALUES (1,'A',true),(2,'B',true),(3,'Empty',true),(4,'Inactive',false);
+                INSERT INTO folder_bulan VALUES (1,'August',2026,8,1),(2,'September',2026,9,1),(3,'October',2026,10,1),(4,'September',2026,9,2);
+                INSERT INTO invoice VALUES (1,1,100000000),(2,2,30000000),(3,4,1000);
+                INSERT INTO transaksi_harian VALUES (1,1,10000000,20000000),(2,1,10000000,20000000);
+            """)
+
+            def fetch(sql, params=()):
+                cur.execute(sql, params)
+                return cur.fetchall()
+
+            monkeypatch.setattr(finance_repo, "fetch_all", fetch)
+            yield cur
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_real_query_keeps_invoice_bon_once_and_carries_live(isolated_db):
+    rows = finance_repo.get_monthly_totals(1)
+    assert rows[0]["modal_pusat"] == 100000000
+    periods, branches = hitung_riwayat_hutang(rows)
+    assert [p["sisa_hutang"] for p in periods] == [120000000, 150000000, 150000000]
+    assert ringkasan_seluruh_cabang(branches)["sisa_hutang"] == 150000000
+    isolated_db.execute("UPDATE transaksi_harian SET masuk_uang=30000000 WHERE id=1")
+    corrected, _ = hitung_riwayat_hutang(finance_repo.get_monthly_totals(1))
+    assert corrected[-1]["sisa_hutang"] == 130000000
+
+
+def test_real_query_cap_branch_scope_and_empty_branch(isolated_db):
+    rows = finance_repo.get_monthly_totals(1, through_folder_id=2)
+    assert [r["folder_id"] for r in rows] == [1, 2]
+    all_rows = finance_repo.get_monthly_totals(active_only=True)
+    assert {r["cabang_id"] for r in all_rows} == {1, 2, 3}
+    _, branches = hitung_riwayat_hutang(all_rows)
+    assert ringkasan_seluruh_cabang(branches)["sisa_hutang"] == 150001000
+
+
+def test_real_query_multiple_invoices_same_month(isolated_db):
+    isolated_db.execute("INSERT INTO invoice VALUES (99,2,10000000)")
+    isolated_db.execute("INSERT INTO transaksi_harian VALUES (99,2,155000000,0)")
+    rows = finance_repo.get_monthly_totals(1)
+    assert rows[1]["total_invoice"] == 2
+    periods, _ = hitung_riwayat_hutang(rows)
+    assert periods[1]["hutang_bawaan"] == 120000000
+    assert periods[1]["sisa_hutang"] == 5000000
