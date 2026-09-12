@@ -7,8 +7,25 @@ kolom/tabel baru, migration, atau perubahan otomatis pada data tersimpan.
     saldo_awal = sisa_hutang folder sebelumnya
     sisa_hutang = max(0, saldo_awal + invoice_bon + masuk_barang - masuk_uang)
 
-PENTING: invoice_bon tetap nominal baru periode tersebut, bukan gabungan
-dengan hutang lama. Sebelum menggunakan fitur pada data lama, periksa apakah
+## Revisi: folder baru tanpa input Bon
+
+Folder/invoice baru selalu dibuat dengan invoice_bon = 0. Nilai dari pusat
+dicatat sebagai transaksi Barang Masuk, bukan Bon tambahan. Rumus baru:
+
+    sisa_hutang = max(0, hutang_bawaan + masuk_barang - masuk_uang)
+
+Sesuai keputusan pengguna, Bon lama yang sudah tersimpan tetap dihitung dalam
+riwayat dan tidak dihapus atau diubah otomatis. Rumus lengkap di atas tetap
+dipakai untuk kompatibilitas data lama. Tidak diperlukan migration.
+
+POST invoice menerima tanpa field invoice_bon atau dengan nilai 0 untuk client
+lama; nilai nonzero ditolak 422. PUT metadata tanpa field tersebut mempertahankan
+Bon lama. Invoice yang Bon-nya 0 tidak dapat diisi Bon lagi melalui PUT; catat
+nilainya pada Barang Masuk. Form edit Bon hanya tampil untuk Bon lama nonzero.
+API client create_invoice sekarang tidak menerima argumen nominal Bon.
+Perbarui backend dan client bersama agar form lama tidak mengirim Bon nonzero.
+
+PENTING: sebelum menggunakan fitur pada data lama, periksa apakah
 operator pernah memasukkan hutang sebelumnya secara manual ke invoice_bon.
 Jika pernah, backup dan rekonsiliasi dahulu; sistem tidak dapat membedakan
 komponen itu secara otomatis. Jangan mengubah data secara massal tanpa
@@ -54,7 +71,7 @@ menggunakan saldo akhir periode terakhir, bukan jumlah saldo semua periode.
 
 Dari direktori backend:
 
-    .\venv\Scripts\python.exe -B -m pytest --noconftest -p no:cacheprovider -q tests/test_finance_service.py tests/test_debt_carry_forward.py tests/test_debt_postgres.py
+    .\venv\Scripts\python.exe -B -m pytest --noconftest -p no:cacheprovider -q tests/test_finance_service.py tests/test_debt_carry_forward.py tests/test_debt_postgres.py tests/test_invoice_without_bon.py
 
 Tes PostgreSQL hanya memakai TEMP tables dengan search_path=pg_temp pada
 database lokal metrosnack_financial_test, selalu rollback, tidak menulis tabel
@@ -65,7 +82,7 @@ Dari root proyek:
 
     .\client\venv\Scripts\python.exe -B -X utf8 -m unittest discover -s client/tests -p 'test_*.py' -v
 
-Skenario manual: Agustus hutang 120 juta; September invoice baru 30 juta tanpa
-transaksi => saldo 150 juta. Koreksi pembayaran Agustus +20 juta => buka ulang
+Skenario manual: Agustus hutang 120 juta; buat folder September tanpa Bon,
+lalu catat Barang Masuk 30 juta => saldo 150 juta. Koreksi pembayaran Agustus +20 juta => buka ulang
 September, bawaan menjadi 100 juta dan saldo 130 juta. Dashboard dan PDF harus
 menunjukkan saldo terbaru 130 juta, bukan 230 juta.

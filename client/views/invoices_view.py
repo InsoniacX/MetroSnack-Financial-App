@@ -6,7 +6,7 @@ from components.file_picker import get_file_picker
 from components.navigation import navigate
 from components.pagination import ClientPagination
 from utils.formatting import rp
-from utils.validation import parse_year, require_text, parse_date, parse_positive_decimal
+from utils.validation import parse_year, require_text, parse_date
 from utils.pdf_export import generate_cabang_pdf
 from db.folder_repo import get_folders, create_folder, delete_folder, get_cabang_summary
 from db.finance_repo import get_folder_balances
@@ -281,13 +281,6 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
         value=date.today().isoformat(),
         col={"xs": 12, "sm": 6},
     )
-    inv_bon_field = ft.TextField(
-        label="Invoice / Bon / Modal (Rp)",
-        value="0",
-        hint_text="Contoh: 150000 atau 150.000",
-        keyboard_type=ft.KeyboardType.NUMBER,
-        col={"xs": 12, "sm": 6},
-    )
 
     def submit_folder(e):
         if not bulan_dd.value:
@@ -299,7 +292,6 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
             no_laporan = require_text("No. Laporan", inv_no_field.value, max_length=50)
             tgl_dibuat_val = parse_date("Date", inv_tgl_dibuat_field.value)
             tgl_laporan_val = parse_date("TGL Laporan", inv_tgl_laporan_field.value)
-            invoice_bon_val = parse_positive_decimal("Invoice / Bon", inv_bon_field.value)
         except ValueError as ve:
             page.show_dialog(ft.SnackBar(ft.Text(str(ve)), bgcolor=ft.Colors.RED_400))
             return
@@ -313,7 +305,7 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
             return
 
         try:
-            iid = create_invoice(fid, no_laporan, tgl_dibuat_val, tgl_laporan_val, invoice_bon_val, actor["id"])
+            iid = create_invoice(fid, no_laporan, tgl_dibuat_val, tgl_laporan_val, actor["id"])
             log_activity(actor["id"], actor["username"], "CREATE", "invoice", iid, f"Membuat invoice {no_laporan} di {nama_folder}", cabang_id)
             page.pop_dialog()
             page.update()
@@ -339,7 +331,11 @@ def build_folder_list(page: ft.Page, cabang_id: int, route: str, show_back: bool
                     inv_no_field,
                     inv_tgl_dibuat_field,
                     inv_tgl_laporan_field,
-                    inv_bon_field,
+                    ft.Text(
+                        "Tidak perlu input Bon. Catat nilai dari pusat melalui transaksi Barang Masuk. "
+                        "Hutang bulan sebelumnya diteruskan otomatis.",
+                        size=12, col={"xs": 12},
+                    ),
                 ],
                 spacing=10,
                 run_spacing=10,

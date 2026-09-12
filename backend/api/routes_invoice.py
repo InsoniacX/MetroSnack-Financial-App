@@ -29,7 +29,7 @@ def create_invoice(folder_id: int, body: InvoiceCreate, user: dict = Depends(get
     _assert_folder_access(user, folder_id)
     new_id = invoice_repo.create_invoice(
         folder_id, body.no_laporan, body.tanggal_dibuat, body.tanggal_laporan,
-        body.invoice_bon, user["id"],
+        user["id"],
     )
     log_activity(user["id"], user["username"], "CREATE", "invoice", new_id, body.no_laporan, None)
     return {"id": new_id}
@@ -86,8 +86,15 @@ def update_invoice(invoice_id: int, body: InvoiceUpdate, user: dict = Depends(ge
         raise HTTPException(status_code=404, detail="Invoice tidak ditemukan")
     cabang_id = header[6]
     assert_cabang_access(user, cabang_id)
+    # Metadata-only updates must not accidentally erase a historical Bon.
+    invoice_bon = body.invoice_bon if "invoice_bon" in body.model_fields_set else header[4]
+    if not header[4] and invoice_bon:
+        raise HTTPException(
+            status_code=422,
+            detail="Invoice tanpa Bon tidak dapat ditambahkan Bon. Catat nilai dari pusat sebagai barang masuk.",
+        )
     invoice_repo.update_invoice(
-        invoice_id, body.no_laporan, body.tanggal_dibuat, body.tanggal_laporan, body.invoice_bon,
+        invoice_id, body.no_laporan, body.tanggal_dibuat, body.tanggal_laporan, invoice_bon,
     )
     log_activity(user["id"], user["username"], "UPDATE", "invoice", invoice_id, body.no_laporan, None)
     return {"ok": True}

@@ -198,7 +198,7 @@ def build_view(page: ft.Page, folder_id: int):
         col={"xs": 12, "sm": 6},
     )
     edit_invoice_bon_field = ft.TextField(
-        label="Invoice / Bon (Rp)",
+        label="Bon lama (Rp)",
         hint_text="Contoh: 150000 atau 150.000",
         keyboard_type=ft.KeyboardType.NUMBER,
         col={"xs": 12, "sm": 6},
@@ -315,6 +315,7 @@ def build_view(page: ft.Page, folder_id: int):
             else date.today().isoformat()
         )
         edit_invoice_bon_field.value = str(invoice_bon or 0)
+        edit_invoice_bon_field.visible = bool(invoice_bon)
         page.show_dialog(edit_invoice_dlg)
 
     rows = []
@@ -421,13 +422,6 @@ def build_view(page: ft.Page, folder_id: int):
         value=date.today().isoformat(),
         col={"xs": 12, "sm": 6},
     )
-    invoice_bon_field = ft.TextField(
-        label="Invoice / Bon (Rp)",
-        value="0",
-        hint_text="Contoh: 150000 atau 150.000",
-        keyboard_type=ft.KeyboardType.NUMBER,
-        col={"xs": 12, "sm": 6},
-    )
 
     def submit_invoice(e):
         del e
@@ -445,16 +439,11 @@ def build_view(page: ft.Page, folder_id: int):
                 "TGL Laporan",
                 tgl_laporan_field.value,
             )
-            invoice_bon_val = parse_positive_decimal(
-                "Invoice / Bon",
-                invoice_bon_field.value,
-            )
             iid = create_invoice(
                 folder_id,
                 no_laporan,
                 tgl_dibuat_val,
                 tgl_laporan_val,
-                invoice_bon_val,
                 actor["id"],
             )
             log_activity(
@@ -491,7 +480,11 @@ def build_view(page: ft.Page, folder_id: int):
                     no_field,
                     tgl_dibuat_field,
                     tgl_laporan_field,
-                    invoice_bon_field,
+                    ft.Text(
+                        "Tidak perlu input Bon. Catat nilai dari pusat melalui transaksi Barang Masuk. "
+                        "Hutang bulan sebelumnya diteruskan otomatis.",
+                        size=12, col={"xs": 12},
+                    ),
                 ],
                 spacing=10,
                 run_spacing=10,

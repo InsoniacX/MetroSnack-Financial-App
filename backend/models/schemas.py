@@ -129,6 +129,9 @@ class InvoiceCreate(BaseModel):
     invoice_bon: Decimal = Field(
         default=Decimal("0"),
         ge=0,
+        le=0,
+        deprecated=True,
+        description="Invoice baru tidak memakai Bon. Abaikan field ini atau kirim 0; nilai dari pusat dicatat sebagai barang masuk.",
         max_digits=15,
         decimal_places=2,
     )

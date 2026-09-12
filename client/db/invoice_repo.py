@@ -19,12 +19,11 @@ def _iso(value):
     return value.isoformat() if hasattr(value, "isoformat") else value
 
 
-def create_invoice(folder_id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, user_id):
+def create_invoice(folder_id, no_laporan, tanggal_dibuat, tanggal_laporan, user_id):
     body = {
         "no_laporan": no_laporan,
         "tanggal_dibuat": _iso(tanggal_dibuat),
         "tanggal_laporan": _iso(tanggal_laporan),
-        "invoice_bon": str(invoice_bon),
     }
     resp = api_post(f"/folders/{folder_id}/invoices", body)
     return resp["id"]

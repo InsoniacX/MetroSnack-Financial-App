@@ -21,11 +21,12 @@ def get_invoices(folder_id):
     """, (folder_id,))
 
 
-def create_invoice(folder_id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, user_id):
+def create_invoice(folder_id, no_laporan, tanggal_dibuat, tanggal_laporan, user_id):
+    """Invoice baru selalu Bon 0; nilai dari pusat dicatat lewat masuk_barang."""
     return execute("""
         INSERT INTO invoice (folder_bulan_id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, dibuat_oleh)
-        VALUES (%s,%s,%s,%s,%s,%s) RETURNING id
-    """, (folder_id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, user_id), returning=True)
+        VALUES (%s,%s,%s,%s,0,%s) RETURNING id
+    """, (folder_id, no_laporan, tanggal_dibuat, tanggal_laporan, user_id), returning=True)
 
 
 def delete_invoice(invoice_id):
