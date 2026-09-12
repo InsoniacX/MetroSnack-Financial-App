@@ -9,6 +9,7 @@ from utils.validation import require_text, parse_date, parse_positive_decimal
 from utils.pdf_export import generate_folder_pdf
 from db.invoice_repo import get_invoices, create_invoice, update_invoice, delete_invoice
 from db.folder_repo import get_folder_header
+from db.finance_repo import get_folder_balance
 from db.transaksi_repo import get_transaksi
 from db.activity_repo import log_activity
 from state import app_state
@@ -112,14 +113,13 @@ def build_view(page: ft.Page, folder_id: int):
 
     try:
         invoices = get_invoices(folder_id)
+        keuangan_folder = get_folder_balance(folder_id)
     except Exception as ex:
-        invoices = []
-        page.show_dialog(
-            ft.SnackBar(
-                ft.Text(f"Gagal ambil data: {ex}"),
-                bgcolor=ft.Colors.RED_400,
-            )
-        )
+        return ft.Column([
+            ft.Text("Invoice dan saldo hutang gagal dimuat.", size=18),
+            ft.Text(str(ex), color=ft.Colors.RED_400),
+            ft.TextButton("Coba lagi", on_click=lambda e: refresh()),
+        ])
 
     # ---------- Dialog: konfirmasi hapus invoice ----------
     delete_target = {"iid": None, "no_laporan": None}
@@ -198,7 +198,7 @@ def build_view(page: ft.Page, folder_id: int):
         col={"xs": 12, "sm": 6},
     )
     edit_invoice_bon_field = ft.TextField(
-        label="Invoice / Bon (Rp)",
+        label="Bon lama (Rp)",
         hint_text="Contoh: 150000 atau 150.000",
         keyboard_type=ft.KeyboardType.NUMBER,
         col={"xs": 12, "sm": 6},
@@ -315,6 +315,7 @@ def build_view(page: ft.Page, folder_id: int):
             else date.today().isoformat()
         )
         edit_invoice_bon_field.value = str(invoice_bon or 0)
+        edit_invoice_bon_field.visible = bool(invoice_bon)
         page.show_dialog(edit_invoice_dlg)
 
     rows = []
@@ -421,13 +422,6 @@ def build_view(page: ft.Page, folder_id: int):
         value=date.today().isoformat(),
         col={"xs": 12, "sm": 6},
     )
-    invoice_bon_field = ft.TextField(
-        label="Invoice / Bon (Rp)",
-        value="0",
-        hint_text="Contoh: 150000 atau 150.000",
-        keyboard_type=ft.KeyboardType.NUMBER,
-        col={"xs": 12, "sm": 6},
-    )
 
     def submit_invoice(e):
         del e
@@ -445,16 +439,11 @@ def build_view(page: ft.Page, folder_id: int):
                 "TGL Laporan",
                 tgl_laporan_field.value,
             )
-            invoice_bon_val = parse_positive_decimal(
-                "Invoice / Bon",
-                invoice_bon_field.value,
-            )
             iid = create_invoice(
                 folder_id,
                 no_laporan,
                 tgl_dibuat_val,
                 tgl_laporan_val,
-                invoice_bon_val,
                 actor["id"],
             )
             log_activity(
@@ -491,7 +480,11 @@ def build_view(page: ft.Page, folder_id: int):
                     no_field,
                     tgl_dibuat_field,
                     tgl_laporan_field,
-                    invoice_bon_field,
+                    ft.Text(
+                        "Tidak perlu input Bon. Catat nilai dari pusat melalui transaksi Barang Masuk. "
+                        "Hutang bulan sebelumnya diteruskan otomatis.",
+                        size=12, col={"xs": 12},
+                    ),
                 ],
                 spacing=10,
                 run_spacing=10,
@@ -531,8 +524,9 @@ def build_view(page: ft.Page, folder_id: int):
         nama_file_default = f"Laporan_{nama_folder.replace(' ', '_')}.pdf"
 
         try:
+            balance = get_folder_balance(folder_id)
             invoices_with_transaksi = []
-            for inv in invoices:
+            for inv in get_invoices(folder_id):
                 iid = inv[0]
                 transaksi = get_transaksi(iid)
                 invoices_with_transaksi.append(
@@ -547,6 +541,7 @@ def build_view(page: ft.Page, folder_id: int):
                     nama_folder,
                     invoices_with_transaksi,
                     None,
+                    keuangan_folder=balance,
                 )
                 save_path = await export_picker.save_file(
                     dialog_title="Simpan laporan PDF",
@@ -570,6 +565,7 @@ def build_view(page: ft.Page, folder_id: int):
                     nama_folder,
                     invoices_with_transaksi,
                     save_path,
+                    keuangan_folder=balance,
                 )
 
             if not save_path:
@@ -713,6 +709,12 @@ def build_view(page: ft.Page, folder_id: int):
     )
 
     body_controls = [
+        ft.Text(
+            f"Hutang bawaan: {rp(keuangan_folder['hutang_bawaan'])}  |  "
+            f"Sisa hutang akhir bulan: {rp(keuangan_folder['sisa_hutang'])}",
+            size=14, weight=ft.FontWeight.W_500,
+        ),
+        ft.Text("Saldo pada tabel hanya per invoice, belum termasuk hutang bawaan bulan sebelumnya.", size=12),
         ft.ResponsiveRow(
             [header_title, header_actions],
             spacing=8,

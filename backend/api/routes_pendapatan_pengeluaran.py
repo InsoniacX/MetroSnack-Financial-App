@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from auth.dependencies import assert_cabang_access, get_current_user
 from models.schemas import (
     PendapatanPengeluaranCreate,
+    PendapatanPengeluaranPeriode,
     PendapatanPengeluaranUpdate,
 )
 from repositories import cabang_repo
@@ -60,6 +61,27 @@ def list_entries(
         tanggal_akhir,
         jenis,
         limit,
+    )
+
+
+@router.get(
+    "/periode",
+    response_model=list[PendapatanPengeluaranPeriode],
+)
+def list_periode(
+    cabang_id: int = Query(..., gt=0),
+    tahun: int | None = Query(
+        default=None,
+        ge=2000,
+        le=2100,
+    ),
+    user: dict = Depends(get_current_user),
+):
+    _assert_feature_access(user, cabang_id)
+
+    return repo.get_periods(
+        cabang_id=cabang_id,
+        tahun=tahun,
     )
 
 

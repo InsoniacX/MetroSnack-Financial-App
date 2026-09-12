@@ -6,7 +6,8 @@ from auth.dependencies import (
     require_pusat_admin,
 )
 from repositories import folder_repo
-from services.finance_service import hitung_sisa_hutang
+from services.finance_service import ringkasan_seluruh_cabang
+from services import debt_service
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -18,8 +19,8 @@ def dashboard_summary(cabang_id: int | None = None, user: dict = Depends(get_cur
     elif not is_pusat_admin(user):
         cabang_id = user["cabang_id"]
 
-    raw = folder_repo.get_dashboard_summary_raw(cabang_id)
-    return hitung_sisa_hutang(raw["modal_pusat"], raw["masuk_uang"], raw["masuk_barang"])
+    _, branches = debt_service.get_history(cabang_id)
+    return ringkasan_seluruh_cabang(branches)
 
 
 @router.get("/cabang-summary")
@@ -35,17 +36,8 @@ def cabang_summary(
 def cabang_breakdown(
     user: dict = Depends(require_pusat_admin),
 ):
-    rows = folder_repo.get_cabang_breakdown()
-    result = []
-
-    for cabang_id, nama_cabang, modal, omzet, barang in rows:
-        breakdown = hitung_sisa_hutang(modal, omzet, barang)
-        breakdown.update({
-            "cabang_id": cabang_id, 
-            "nama_cabang": nama_cabang
-        })
-        result.append(breakdown)
-    return result
+    _, branches = debt_service.get_history(active_only=True)
+    return sorted(branches, key=lambda b: b["nama_cabang"])
 
 
 @router.get("/monthly-trend")
@@ -59,10 +51,6 @@ def monthly_trend(
     elif not is_pusat_admin(user):
         cabang_id = user["cabang_id"]
 
-    rows = folder_repo.get_monthly_trend_raw(cabang_id, limit_months)
-    result = []
-    for folder_id, nama_folder, bulan, tahun, modal, omzet, barang in rows:
-        breakdown = hitung_sisa_hutang(modal, omzet, barang)
-        breakdown.update({"folder_id": folder_id, "nama_folder": nama_folder, "bulan": bulan, "tahun": tahun})
-        result.append(breakdown)
-    return result
+    periods, _ = debt_service.get_history(cabang_id)
+    # Apply display limit only AFTER replaying older balances.
+    return sorted(periods, key=lambda p: (p["tahun"], p["bulan"], p["folder_id"]))[-limit_months:]

@@ -1,3 +1,4 @@
+from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
@@ -6,9 +7,10 @@ import flet as ft
 from components.appbar import is_mobile_layout
 from components.file_picker import get_file_picker
 from components.metric_card import metric_card
+from components.navigation import navigate
 from components.pagination import ClientPagination
+from config import MONTH
 from db.activity_repo import log_activity
-from db.cabang_repo import get_active_cabang
 from db.pendapatan_pengeluaran_repo import (
     DEFAULT_KATEGORI_PENDAPATAN,
     DEFAULT_KATEGORI_PENGELUARAN,
@@ -23,12 +25,30 @@ from utils.pdf_export import generate_pendapatan_pengeluaran_pdf
 from utils.validation import parse_date, parse_positive_decimal, require_text
 
 
-def build_view(page: ft.Page):
+def build_view(
+    page: ft.Page,
+    *,
+    cabang_id: int,
+    bulan: int,
+    tahun: int,
+    nama_cabang: str,
+):
     actor = app_state.user or {}
-    is_pusat = actor.get("cabang_id") is None
+    is_pusat = actor.get("role") == "admin" and actor.get("cabang_id") is None
+    selected_cabang_id = int(cabang_id)
+    if not actor or selected_cabang_id <= 0 or (
+        not is_pusat and selected_cabang_id != actor.get("cabang_id")
+    ):
+        raise ValueError("Anda tidak punya akses ke Kas cabang ini.")
+    if not 2000 <= tahun <= 2100 or not 1 <= bulan <= 12:
+        raise ValueError("Bulan atau tahun tidak valid.")
+    month_start = date(tahun, bulan, 1)
+    month_end = date(tahun, bulan, monthrange(tahun, bulan)[1])
+    period_label = f"{MONTH[bulan]} {tahun}"
     is_dark = page.theme_mode == ft.ThemeMode.DARK
     mobile = is_mobile_layout(page)
     today = date.today()
+    default_form_date = today if month_start <= today <= month_end else month_start
 
     page_width = getattr(page, "width", None) or 1100
     form_content_width = min(500, max(260, page_width - 72))
@@ -36,29 +56,20 @@ def build_view(page: ft.Page):
     state_padding = 24 if mobile else 40
 
     filter_state = {
-        "start_date": None,
-        "end_date": None,
-        "cabang_id": None if is_pusat else actor.get("cabang_id"),
+        "start_date": month_start,
+        "end_date": month_end,
+        "cabang_id": selected_cabang_id,
         "search": "",
         "sort_order": "desc",
     }
 
-    cabang_list = []
-    cabang_load_error = None
-
-    if is_pusat:
-        try:
-            cabang_list = get_active_cabang()
-            if not cabang_list:
-                cabang_load_error = "Belum ada cabang aktif."
-        except Exception as error:
-            cabang_load_error = (
-                f"Daftar cabang gagal dimuat: {error}"
-            )
+    cabang_list = [(selected_cabang_id, nama_cabang)]
 
     def get_filtered_data():
         return get_transaksi_kas(
             cabang_id=filter_state["cabang_id"],
+            bulan=bulan,
+            tahun=tahun,
             start_date=filter_state["start_date"],
             end_date=filter_state["end_date"],
             search=filter_state["search"],
@@ -69,42 +80,6 @@ def build_view(page: ft.Page):
         del e
         page.pop_dialog()
         page.update()
-
-    def resolve_cabang_id(dropdown):
-        if not is_pusat:
-            cabang_id = actor.get("cabang_id")
-            if cabang_id is None:
-                raise ValueError(
-                    "Akun ini belum terhubung dengan cabang."
-                )
-            return int(cabang_id)
-
-        if cabang_load_error:
-            raise ValueError(cabang_load_error)
-
-        if not cabang_list:
-            raise ValueError("Tidak ada cabang aktif yang dapat dipilih.")
-
-        selected_value = dropdown.value
-        if not selected_value:
-            raise ValueError("Silakan pilih cabang terlebih dahulu.")
-
-        try:
-            cabang_id = int(selected_value)
-        except (TypeError, ValueError) as error:
-            raise ValueError("Cabang yang dipilih tidak valid.") from error
-
-        valid_cabang_ids = {
-            int(cabang[0])
-            for cabang in cabang_list
-        }
-
-        if cabang_id not in valid_cabang_ids:
-            raise ValueError(
-                "Cabang yang dipilih tidak tersedia atau sudah tidak aktif."
-            )
-
-        return cabang_id
 
     # ---------------------------------------------------------------------
     # Dialog tambah dan edit
@@ -123,7 +98,7 @@ def build_view(page: ft.Page):
 
     form_tanggal = ft.TextField(
         label="Tanggal (YYYY-MM-DD)",
-        value=today.isoformat(),
+        value=default_form_date.isoformat(),
         col={"xs": 12, "sm": 6},
     )
 
@@ -156,7 +131,8 @@ def build_view(page: ft.Page):
     form_cabang_dropdown = ft.Dropdown(
         label="Cabang",
         options=[ft.dropdown.Option(str(c[0]), c[1]) for c in cabang_list],
-        value=None,
+        value=str(selected_cabang_id),
+        disabled=True,
         col={"xs": 12, "sm": 6},
     )
 
@@ -181,6 +157,11 @@ def build_view(page: ft.Page):
         del e
         try:
             tanggal = parse_date("Tanggal", form_tanggal.value)
+            if not month_start <= tanggal <= month_end:
+                raise ValueError(
+                    f"Tanggal transaksi harus berada pada {period_label}. "
+                    "Buka folder bulan tujuan untuk mencatat transaksi bulan lain."
+                )
             nominal = parse_positive_decimal(
                 "Nominal",
                 form_nominal.value,
@@ -197,7 +178,7 @@ def build_view(page: ft.Page):
             jenis = form_jenis.value
             nota = (form_nota.value or "").strip()
 
-            cabang_id = resolve_cabang_id(form_cabang_dropdown)
+            cabang_id = selected_cabang_id
 
             nama_cabang = next(
                 (
@@ -306,12 +287,12 @@ def build_view(page: ft.Page):
         form_dialog_title.value = "Tambah Transaksi Baru"
         form_jenis.value = "Pendapatan"
         update_kategori_options()
-        form_tanggal.value = date.today().isoformat()
+        form_tanggal.value = default_form_date.isoformat()
         form_nominal.value = ""
         form_keterangan.value = ""
         form_nota.value = ""
         if is_pusat:
-            form_cabang_dropdown.value = None
+            form_cabang_dropdown.value = str(selected_cabang_id)
         page.show_dialog(form_dialog)
 
     def open_edit_dialog(item):
@@ -391,14 +372,14 @@ def build_view(page: ft.Page):
     filter_start_field = ft.TextField(
         label="Dari Tanggal (YYYY-MM-DD)",
         hint_text="YYYY-MM-DD",
-        value="",
+        value=month_start.isoformat(),
         col={"xs": 12, "sm": 6, "lg": 3},
     )
 
     filter_end_field = ft.TextField(
         label="Sampai Tanggal (YYYY-MM-DD)",
         hint_text="YYYY-MM-DD",
-        value="",
+        value=month_end.isoformat(),
         col={"xs": 12, "sm": 6, "lg": 3},
     )
 
@@ -430,7 +411,7 @@ def build_view(page: ft.Page):
                     filter_start_field.value,
                 )
                 if (filter_start_field.value or "").strip()
-                else None
+                else month_start
             )
 
             new_end_date = (
@@ -439,8 +420,14 @@ def build_view(page: ft.Page):
                     filter_end_field.value,
                 )
                 if (filter_end_field.value or "").strip()
-                else None
+                else month_end
             )
+
+            if not (
+                month_start <= new_start_date <= month_end
+                and month_start <= new_end_date <= month_end
+            ):
+                raise ValueError(f"Filter tanggal harus berada pada {period_label}.")
 
             if (
                 new_start_date is not None
@@ -472,8 +459,8 @@ def build_view(page: ft.Page):
 
     def reset_filter(e=None):
         del e
-        filter_start_field.value = ""
-        filter_end_field.value = ""
+        filter_start_field.value = month_start.isoformat()
+        filter_end_field.value = month_end.isoformat()
         filter_sort_dropdown.value = "desc"
         search_field.value = ""
         apply_filter()
@@ -1028,22 +1015,31 @@ def build_view(page: ft.Page):
     refresh_table_content()
 
     header_title = ft.Container(
-        content=ft.Column(
+        content=ft.Row(
             [
-                ft.Text(
-                    "Pendapatan & Pengeluaran",
-                    size=22,
-                    weight=ft.FontWeight.W_600,
+                ft.IconButton(
+                    ft.Icons.ARROW_BACK,
+                    tooltip="Kembali ke folder bulan",
+                    on_click=lambda event: navigate(
+                        page,
+                        f"/pendapatan-pengeluaran/cabang/{selected_cabang_id}",
+                    ),
                 ),
-                ft.Text(
-                    "Kelola dan pantau seluruh transaksi kas masuk & keluar.",
-                    size=13,
-                    color=ft.Colors.GREY_500,
+                ft.Column(
+                    [
+                        ft.Text(
+                            f"Detail Kas - {nama_cabang}",
+                            size=20,
+                            weight=ft.FontWeight.W_500,
+                        ),
+                        ft.Text(period_label, size=13, color=ft.Colors.GREY_500),
+                    ],
+                    spacing=2,
+                    expand=True,
                 ),
             ],
-            spacing=2,
         ),
-        col={"xs": 12, "md": 6},
+        col={"xs": 12, "md": 7},
     )
 
     header_actions = ft.Container(
@@ -1053,13 +1049,6 @@ def build_view(page: ft.Page):
                     "Export PDF" if mobile else "Export ke PDF",
                     icon=ft.Icons.PICTURE_AS_PDF,
                     on_click=export_pdf,
-                ),
-                ft.ElevatedButton(
-                    "Tambah" if mobile else "Tambah Transaksi",
-                    icon=ft.Icons.ADD,
-                    on_click=open_add_dialog,
-                    bgcolor=ft.Colors.BLUE_700,
-                    color=ft.Colors.WHITE,
                 ),
                 ft.IconButton(
                     ft.Icons.REFRESH,
@@ -1076,7 +1065,7 @@ def build_view(page: ft.Page):
                 else ft.MainAxisAlignment.END
             ),
         ),
-        col={"xs": 12, "md": 6},
+        col={"xs": 12, "md": 5},
     )
 
     return ft.Column(
@@ -1100,10 +1089,30 @@ def build_view(page: ft.Page):
             ft.Container(height=12),
             filter_card,
             ft.Container(height=16),
-            ft.Text(
-                "Daftar Transaksi Kas",
-                size=16,
-                weight=ft.FontWeight.W_500,
+            ft.ResponsiveRow(
+                [
+                    ft.Container(
+                        ft.Text("Transaksi Kas", size=16, weight=ft.FontWeight.W_500),
+                        col={"xs": 12, "sm": 6},
+                    ),
+                    ft.Container(
+                        ft.Row(
+                            [
+                                ft.Button(
+                                    "Tambah" if mobile else "Tambah Transaksi",
+                                    icon=ft.Icons.ADD,
+                                    on_click=open_add_dialog,
+                                    bgcolor=ft.Colors.BLUE_700,
+                                    color=ft.Colors.WHITE,
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.START if mobile else ft.MainAxisAlignment.END,
+                        ),
+                        col={"xs": 12, "sm": 6},
+                    ),
+                ],
+                spacing=8,
+                run_spacing=8,
             ),
             ft.Container(height=8),
             table_container,

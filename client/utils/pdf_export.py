@@ -231,7 +231,17 @@ def _ringkasan_paragraph(sisa_hutang, omset, laba_bersih):
     )
 
 
-def generate_invoice_pdf(invoice_header, transaksi, output_path=None):
+def _monthly_debt_paragraph(keuangan_folder):
+    if not keuangan_folder or "hutang_bawaan" not in keuangan_folder or "sisa_hutang" not in keuangan_folder:
+        raise ValueError("Saldo hutang bulanan dari backend wajib tersedia sebelum ekspor PDF.")
+    return Paragraph(
+        f"<b>Hutang bawaan bulan sebelumnya:</b> {rp(keuangan_folder['hutang_bawaan'])}<br/>"
+        f"<b>Sisa hutang akhir bulan (seluruh invoice):</b> {rp(keuangan_folder['sisa_hutang'])}",
+        _styles["Normal"],
+    )
+
+
+def generate_invoice_pdf(invoice_header, transaksi, output_path=None, *, keuangan_folder=None):
     """
     invoice_header: tuple (id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, folder_bulan_id, cabang_id, sisa_barang_manual)
     -> hasil dari db.invoice_repo.get_invoice_header() / get_invoice_full()
@@ -243,7 +253,7 @@ def generate_invoice_pdf(invoice_header, transaksi, output_path=None):
     total_uang = sum(t[3] for t in transaksi) if transaksi else 0
     total_barang = sum(t[2] for t in transaksi) if transaksi else 0
     laba_bersih = total_uang - total_barang
-    sisa_hutang = (invoice_bon or 0) + total_barang - total_uang
+    debt_paragraph = _monthly_debt_paragraph(keuangan_folder)
     buffer = BytesIO()
     target = output_path if isinstance(output_path, str) else buffer
 
@@ -261,7 +271,9 @@ def generate_invoice_pdf(invoice_header, transaksi, output_path=None):
         Spacer(1, 6),
         _transaksi_table(transaksi) if transaksi else Paragraph("Belum ada transaksi.", _style_small),
         Spacer(1, 16),
-        _ringkasan_paragraph(sisa_hutang, total_uang, laba_bersih),
+        debt_paragraph,
+        Paragraph(f"<b>Omset invoice:</b> {rp(total_uang)} &nbsp;&nbsp; "
+                  f"<b>Laba bersih invoice:</b> {rp(laba_bersih)}", _styles["Normal"]),
     ]
     doc.build(elements)
 
@@ -269,15 +281,17 @@ def generate_invoice_pdf(invoice_header, transaksi, output_path=None):
         return buffer.getvalue()
 
 
-def _folder_section_elements(nama_folder, invoices_with_transaksi, heading_style):
+def _folder_section_elements(nama_folder, invoices_with_transaksi, heading_style, keuangan_folder):
     elements = []
     elements.append(Paragraph(nama_folder, heading_style))
     elements.append(Spacer(1, 8))
+    elements.append(_monthly_debt_paragraph(keuangan_folder))
+    elements.append(Spacer(1, 8))
 
-    data = [["No.", "TGL Laporan", "Invoice/Bon", "Omset", "Laba Bersih", "Sisa Hutang"]]
+    data = [["No.", "TGL Laporan", "Invoice/Bon", "Omset", "Laba Bersih", "Saldo invoice*"]]
     total_omzet_all = 0
     total_laba_all = 0
-    total_hutang_all = 0
+    total_hutang_all = keuangan_folder["sisa_hutang"]
 
     for item in invoices_with_transaksi:
         iid, no_laporan, tgl_dibuat, tgl_laporan, invoice_bon, total_omzet, total_barang = item["header"]
@@ -290,9 +304,8 @@ def _folder_section_elements(nama_folder, invoices_with_transaksi, heading_style
         ])
         total_omzet_all += total_omzet
         total_laba_all += laba_bersih
-        total_hutang_all += sisa_hutang
 
-    data.append(["TOTAL", "", "", rp(total_omzet_all), rp(total_laba_all), rp(total_hutang_all)])
+    data.append(["TOTAL", "", "", rp(total_omzet_all), rp(total_laba_all), "Lihat saldo bulan"])
 
     table = Table(data, colWidths=[2.5 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm, 3 * cm])
     table.setStyle(TableStyle([
@@ -306,6 +319,10 @@ def _folder_section_elements(nama_folder, invoices_with_transaksi, heading_style
         ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
     ]))
     elements.append(table)
+    elements.append(Paragraph(
+        "*Saldo invoice = Invoice/Bon + masuk barang - masuk uang, tanpa hutang bawaan. "
+        "Saldo minus menandakan kelebihan pembayaran pada invoice tersebut.", _style_small,
+    ))
 
     elements.append(Spacer(1, 14))
     elements.append(Paragraph("Detail Transaksi per Invoice", _styles["Heading3"]))
@@ -327,19 +344,23 @@ def _folder_section_elements(nama_folder, invoices_with_transaksi, heading_style
         else:
             elements.append(Paragraph("Belum ada transaksi pada invoice ini.", _style_small))
         elements.append(Spacer(1, 6))
-        elements.append(_ringkasan_paragraph(sisa_hutang, total_omzet, laba_bersih))
+        elements.append(Paragraph(
+            f"<b>Saldo invoice (tanpa bawaan):</b> {rp(sisa_hutang)} &nbsp;&nbsp; "
+            f"<b>Omset:</b> {rp(total_omzet)} &nbsp;&nbsp; <b>Laba bersih:</b> {rp(laba_bersih)}",
+            _styles["Normal"],
+        ))
         elements.append(Spacer(1, 10))
 
     return elements, total_omzet_all, total_laba_all, total_hutang_all
 
 
-def generate_folder_pdf(nama_folder, invoices_with_transaksi, output_path=None):
+def generate_folder_pdf(nama_folder, invoices_with_transaksi, output_path=None, *, keuangan_folder=None):
     buffer = BytesIO()
     target = output_path if isinstance(output_path, str) else buffer
     doc = SimpleDocTemplate(target, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm, leftMargin=1.2 * cm, rightMargin=1.2 * cm)
     elements = [Paragraph(f"Laporan Keuangan - {nama_folder}", _styles["Title"]), Spacer(1, 12)]
 
-    section_elements, _, _, _ = _folder_section_elements(nama_folder, invoices_with_transaksi, _styles["Heading2"])
+    section_elements, _, _, _ = _folder_section_elements(nama_folder, invoices_with_transaksi, _styles["Heading2"], keuangan_folder)
     elements.extend(section_elements[2:] if len(section_elements) > 2 else section_elements)
 
     doc.build(elements)
@@ -358,18 +379,24 @@ def generate_cabang_pdf(nama_cabang, folders_data, output_path=None):
     grand_hutang = 0
     all_sections = []
 
+    # Closing balances already include earlier months. Never sum them again.
+    if folders_data:
+        latest = max(folders_data, key=lambda f: (
+            f["keuangan_folder"]["tahun"], f["keuangan_folder"]["bulan"],
+        ))
+        grand_hutang = latest["keuangan_folder"]["sisa_hutang"]
+
     for f in folders_data:
         section_elements, omzet_all, laba_all, hutang_all = _folder_section_elements(
-            f["nama_folder"], f["invoices_with_transaksi"], _styles["Heading2"],
+            f["nama_folder"], f["invoices_with_transaksi"], _styles["Heading2"], f["keuangan_folder"],
         )
         all_sections.append(section_elements)
         grand_omzet += omzet_all
         grand_laba += laba_all
-        grand_hutang += hutang_all
 
     elements.append(Paragraph(
         f"<b>Total {len(folders_data)} periode:</b> Omset {rp(grand_omzet)} &nbsp;&nbsp; "
-        f"Laba Bersih {rp(grand_laba)} &nbsp;&nbsp; Sisa Hutang {rp(grand_hutang)}",
+        f"Laba Bersih {rp(grand_laba)} &nbsp;&nbsp; Sisa Hutang Bulan Terakhir {rp(grand_hutang)}",
         _styles["Normal"],
     ))
     elements.append(Spacer(1, 16))

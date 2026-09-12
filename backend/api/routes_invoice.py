@@ -4,6 +4,7 @@ from models.schemas import InvoiceCreate, InvoiceUpdate, SisaBarangUpdate
 from repositories import invoice_repo, folder_repo, transaksi_repo
 from repositories.activity_repo import log_activity
 from services.finance_service import hitung_sisa_hutang
+from services import debt_service
 
 router = APIRouter(tags=["invoices"])
 
@@ -28,7 +29,7 @@ def create_invoice(folder_id: int, body: InvoiceCreate, user: dict = Depends(get
     _assert_folder_access(user, folder_id)
     new_id = invoice_repo.create_invoice(
         folder_id, body.no_laporan, body.tanggal_dibuat, body.tanggal_laporan,
-        body.invoice_bon, user["id"],
+        user["id"],
     )
     log_activity(user["id"], user["username"], "CREATE", "invoice", new_id, body.no_laporan, None)
     return {"id": new_id}
@@ -61,7 +62,10 @@ def get_invoice_full(invoice_id: int, user: dict = Depends(get_current_user)):
     cabang_id = header[6]
     assert_cabang_access(user, cabang_id)
     transaksi = transaksi_repo.get_transaksi(invoice_id)
-    return {"header": header, "transaksi": transaksi}
+    balance = debt_service.get_folder_balance(header[5], cabang_id)
+    if balance is None:
+        raise HTTPException(status_code=404, detail="Folder tidak ditemukan")
+    return {"header": header, "transaksi": transaksi, "keuangan_folder": balance}
 
 
 @router.get("/invoices/{invoice_id}")
@@ -82,8 +86,15 @@ def update_invoice(invoice_id: int, body: InvoiceUpdate, user: dict = Depends(ge
         raise HTTPException(status_code=404, detail="Invoice tidak ditemukan")
     cabang_id = header[6]
     assert_cabang_access(user, cabang_id)
+    # Metadata-only updates must not accidentally erase a historical Bon.
+    invoice_bon = body.invoice_bon if "invoice_bon" in body.model_fields_set else header[4]
+    if not header[4] and invoice_bon:
+        raise HTTPException(
+            status_code=422,
+            detail="Invoice tanpa Bon tidak dapat ditambahkan Bon. Catat nilai dari pusat sebagai barang masuk.",
+        )
     invoice_repo.update_invoice(
-        invoice_id, body.no_laporan, body.tanggal_dibuat, body.tanggal_laporan, body.invoice_bon,
+        invoice_id, body.no_laporan, body.tanggal_dibuat, body.tanggal_laporan, invoice_bon,
     )
     log_activity(user["id"], user["username"], "UPDATE", "invoice", invoice_id, body.no_laporan, None)
     return {"ok": True}
@@ -104,9 +115,10 @@ def delete_invoice(invoice_id: int, user: dict = Depends(get_current_user)):
 @router.get("/invoices/{invoice_id}/sisa-hutang")
 def get_sisa_hutang(invoice_id: int, user: dict = Depends(get_current_user)):
     """
-    CANDIDATE - lihat services/finance_service.py. Endpoint ini
-    mengembalikan breakdown lengkap (bukan cuma angka akhir) supaya
-    gampang dicocokkan ke ledger saat proses verifikasi.
+    Saldo hutang CABANG sampai akhir folder bulan invoice ini, termasuk
+    bawaan bulan sebelumnya. Untuk folder lama berisi beberapa invoice,
+    semua invoice bulan itu dihitung sekali. Rincian invoice sendiri tetap
+    tersedia di rincian_invoice (tanpa carry-forward).
     """
     header = invoice_repo.get_invoice_header(invoice_id)
     if header is None:
@@ -118,4 +130,8 @@ def get_sisa_hutang(invoice_id: int, user: dict = Depends(get_current_user)):
     if totals is None:
         raise HTTPException(status_code=404, detail="Data transaksi invoice tidak ditemukan")
     modal_pusat, masuk_uang, masuk_barang = totals
-    return hitung_sisa_hutang(modal_pusat, masuk_uang, masuk_barang)
+    balance = debt_service.get_folder_balance(header[5], cabang_id)
+    if balance is None:
+        raise HTTPException(status_code=404, detail="Folder tidak ditemukan")
+    return {**balance, "invoice_id": invoice_id,
+            "rincian_invoice": hitung_sisa_hutang(modal_pusat, masuk_uang, masuk_barang)}

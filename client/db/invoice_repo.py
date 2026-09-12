@@ -1,5 +1,6 @@
 from .http_client import api_get, api_post, api_put, api_delete, api_patch_json, ApiError
 from ._convert import to_date, to_decimal
+from .finance_repo import parse_balance
 
 
 def get_invoices(folder_id):
@@ -18,12 +19,11 @@ def _iso(value):
     return value.isoformat() if hasattr(value, "isoformat") else value
 
 
-def create_invoice(folder_id, no_laporan, tanggal_dibuat, tanggal_laporan, invoice_bon, user_id):
+def create_invoice(folder_id, no_laporan, tanggal_dibuat, tanggal_laporan, user_id):
     body = {
         "no_laporan": no_laporan,
         "tanggal_dibuat": _iso(tanggal_dibuat),
         "tanggal_laporan": _iso(tanggal_laporan),
-        "invoice_bon": str(invoice_bon),
     }
     resp = api_post(f"/folders/{folder_id}/invoices", body)
     return resp["id"]
@@ -33,17 +33,17 @@ def delete_invoice(invoice_id):
     api_delete(f"/invoices/{invoice_id}")
 
 
-def get_invoice_full(invoice_id):
+def get_invoice_full(invoice_id, *, with_finance=False):
     """Gabungan header + transaksi dalam 1 request (bukan 2 terpisah),
     supaya halaman transaksi harian lebih cepat muncul. Kembalikan
-    (header_tuple, transaksi_list) -- bentuknya sama seperti kalau
-    manggil get_invoice_header() + get_transaksi() terpisah, jadi
-    tinggal pakai di invoice_detail_view.py tanpa banyak perubahan."""
+    (header_tuple, transaksi_list) untuk pemanggil lama. with_finance=True
+    menambahkan saldo seluruh folder bulan sebagai elemen ketiga, tanpa
+    mencampur hutang bawaan ke nominal invoice_bon di header."""
     try:
         resp = api_get(f"/invoices/{invoice_id}/full")
     except ApiError as e:
         if e.status_code == 404:
-            return None, []
+            return (None, [], None) if with_finance else (None, [])
         raise
 
     iid, no_laporan, tgl_dibuat, tgl_laporan, invoice_bon, folder_bulan_id, cabang_id, sisa_barang_manual = resp["header"]
@@ -58,6 +58,11 @@ def get_invoice_full(invoice_id):
         tid, tgl, mbarang, muang, lk, ket, nota = r
         transaksi.append((tid, to_date(tgl), to_decimal(mbarang), to_decimal(muang), to_decimal(lk), ket, nota))
 
+    if with_finance:
+        balance = parse_balance(resp.get("keuangan_folder"))
+        if balance["folder_id"] != folder_bulan_id or balance["cabang_id"] != cabang_id:
+            raise ValueError("Saldo hutang tidak sesuai dengan folder invoice")
+        return header, transaksi, balance
     return header, transaksi
 
 

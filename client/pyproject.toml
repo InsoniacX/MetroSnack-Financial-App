@@ -22,6 +22,10 @@ exclude = [
     "setup.iss",
     ".prettierrc",
     ".env.example",
+    "Dokumentasi_Rilis",
+    "installer_output",
+    ".git",
+    ".gitignore",
 ]
 
 [tool.flet.android]

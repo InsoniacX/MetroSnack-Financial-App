@@ -129,6 +129,9 @@ class InvoiceCreate(BaseModel):
     invoice_bon: Decimal = Field(
         default=Decimal("0"),
         ge=0,
+        le=0,
+        deprecated=True,
+        description="Invoice baru tidak memakai Bon. Abaikan field ini atau kirim 0; nilai dari pusat dicatat sebagai barang masuk.",
         max_digits=15,
         decimal_places=2,
     )
@@ -220,6 +223,14 @@ class PendapatanPengeluaranUpdate(BaseModel):
         max_digits=14,
         decimal_places=2,
     )
+
+class PendapatanPengeluaranPeriode(BaseModel):
+    bulan: int = Field(..., ge=1, le=12)
+    tahun: int = Field(..., ge=2000, le=2100)
+    jumlah_transaksi: int = Field(..., ge=0)
+    total_pendapatan: Decimal
+    total_pengeluaran: Decimal
+    saldo_bersih: Decimal
 
 class SupirKenekCreate(BaseModel):
     cabang_id: int = Field(..., gt=0)

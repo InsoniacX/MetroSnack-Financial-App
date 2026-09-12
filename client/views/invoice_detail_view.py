@@ -64,7 +64,14 @@ def build_view(page: ft.Page, invoice_id: int):
     is_pusat = actor.get("cabang_id") is None
     is_dark = page.theme_mode == ft.ThemeMode.DARK
 
-    header, transaksi = get_invoice_full(invoice_id)
+    try:
+        header, transaksi, keuangan_folder = get_invoice_full(invoice_id, with_finance=True)
+    except Exception as ex:
+        return ft.Column([
+            ft.Text("Data invoice dan saldo hutang gagal dimuat.", size=18),
+            ft.Text(str(ex), color=ft.Colors.RED_400),
+            ft.TextButton("Coba lagi", on_click=lambda e: refresh()),
+        ])
     if header is None:
         return ft.View(route=f"/invoice/{invoice_id}", controls=[ft.Text("Invoice tidak ditemukan.")])
     iid, no_laporan, tgl_dibuat, tgl_laporan, invoice_bon, folder_id, invoice_cabang_id, sisa_barang_manual = header
@@ -83,7 +90,7 @@ def build_view(page: ft.Page, invoice_id: int):
 
     omset_penjualan = total_uang
     laba_bersih = total_uang - total_barang
-    sisa_hutang_toko = (invoice_bon or 0) + total_barang - total_uang
+    sisa_hutang_toko = keuangan_folder["sisa_hutang"]
     akumulasi_kurang_uang = sum([t[4] for t in transaksi if t[5] == "Kurang Uang"]) if transaksi else Decimal(0)
     akumulasi_lebih_uang = sum([t[4] for t in transaksi if t[5] == "Lebih Uang"]) if transaksi else Decimal(0)
 
@@ -341,7 +348,8 @@ def build_view(page: ft.Page, invoice_id: int):
         nama_file_default = f"Invoice_{(no_laporan or str(invoice_id)).replace(' ', '_')}.pdf"
         try:
             if page.platform == ft.PagePlatform.ANDROID or page.platform == ft.PagePlatform.IOS:
-                pdf_bytes = generate_invoice_pdf(header, transaksi, None)
+                fresh_header, fresh_transaksi, balance = get_invoice_full(invoice_id, with_finance=True)
+                pdf_bytes = generate_invoice_pdf(fresh_header, fresh_transaksi, None, keuangan_folder=balance)
                 save_path = await export_picker.save_file(
                     dialog_title="Simpan invoice PDF", 
                     file_name=nama_file_default,
@@ -361,7 +369,8 @@ def build_view(page: ft.Page, invoice_id: int):
                     return
                 if not save_path.lower().endswith(".pdf"):
                     save_path += ".pdf"
-                generate_invoice_pdf(header, transaksi, save_path)
+                fresh_header, fresh_transaksi, balance = get_invoice_full(invoice_id, with_finance=True)
+                generate_invoice_pdf(fresh_header, fresh_transaksi, save_path, keuangan_folder=balance)
 
             log_activity(actor["id"], actor["username"], "CREATE", "export_pdf", invoice_id, f"Export PDF invoice {no_laporan or invoice_id}", invoice_cabang_id)
             page.show_dialog(ft.SnackBar(ft.Text(f"PDF berhasil disimpan: {save_path}"), bgcolor=ft.Colors.GREEN_700))
@@ -513,6 +522,15 @@ def build_view(page: ft.Page, invoice_id: int):
         ),
         ft.Container(height=8),
         ft.Container(header_info, padding=16, border_radius=10),
+        ft.Text(
+            f"Hutang bawaan bulan sebelumnya: {rp(keuangan_folder['hutang_bawaan'])}",
+            size=14, weight=ft.FontWeight.W_500,
+        ),
+        ft.Text(
+            "Sisa hutang dihitung untuk seluruh folder bulan ini, termasuk hutang bawaan. "
+            "Buka ulang halaman setelah mengoreksi bulan sebelumnya.",
+            size=12, color=ft.Colors.GREY_400 if is_dark else ft.Colors.GREY_600,
+        ),
         ft.Container(height=20),
         ft.ResponsiveRow(
             [transaction_title, transaction_action],
